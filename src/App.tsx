@@ -1,18 +1,7 @@
-import { useState } from 'react'
-import './App.css'
+import Login from "@/pages/login/login";
 
 function App() {
-
-  const [count, setCount] = useState(0);
-
-  return (
-    <>
-      <p>Hello Word</p>
-      <button onClick={() => setCount(count + 1)}>
-        Count {count}
-      </button>
-    </>
-  )
+  return <Login />;
 }
 
-export default App
+export default App;
