@@ -25,20 +25,27 @@ function InstitutionBrand({ compact = false }: { compact?: boolean }) {
   );
 }
 
-function Login() {
+function Login({ onSuccess }: { onSuccess: (usuario: string) => void }) {
   const [mostrarSenha, setMostrarSenha] = useState(false);
   const [usuario, setUsuario] = useState("");
   const [senha, setSenha] = useState("");
+  const [erro, setErro] = useState("");
+  const [carregando, setCarregando] = useState(false);
 
   async function handleLogin(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    setErro("");
+    setCarregando(true);
 
     try {
       const resposta = await login({ usuario, senha });
       localStorage.setItem("token", resposta.token);
-      console.log("Login realizado com sucesso");
+      localStorage.setItem("usuarioAtual", usuario);
+      onSuccess(usuario);
     } catch (error) {
-      console.error("Erro ao realizar login", error);
+      setErro(error instanceof Error ? error.message : "Não foi possível entrar no sistema.");
+    } finally {
+      setCarregando(false);
     }
   }
 
@@ -105,6 +112,7 @@ function Login() {
           </div>
 
           <form className="space-y-4" onSubmit={handleLogin}>
+            {erro && <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{erro}</p>}
             <div className="space-y-1.5">
               <Label htmlFor="usuario" className="text-[15px] font-medium text-[#292f38]">
                 Usuário / e-mail
@@ -157,10 +165,11 @@ function Login() {
 
             <Button
               type="submit"
+              disabled={carregando}
               className="h-10 w-full rounded-lg bg-[#1495D6] text-[15px] font-medium text-white hover:bg-[#117eb5]"
             >
               <LogIn size={16} aria-hidden="true" />
-              Entrar
+              {carregando ? "Entrando..." : "Entrar"}
             </Button>
           </form>
         </div>
