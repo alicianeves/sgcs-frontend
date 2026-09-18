@@ -15,10 +15,11 @@ function App() {
     return <Login onSuccess={(nome) => setUsuario(nome)} />;
   }
 
+  const perfil = perfilDoToken(localStorage.getItem("token"));
   return (
     <SistemaLayout
       usuarioAtual={usuario}
-      perfilAtual={perfilDoToken(localStorage.getItem("token"))}
+      perfilAtual={perfil}
       onPessoas={() => { setPaginaKey((valor) => valor + 1); window.scrollTo(0, 0); }}
       onSair={() => {
         localStorage.removeItem("token");
@@ -26,7 +27,7 @@ function App() {
         setUsuario(null);
       }}
     >
-      <PessoasPage key={paginaKey} usuarioAtual={usuario} />
+      <PessoasPage key={paginaKey} usuarioAtual={usuario} podeGerenciarAcesso={perfil === "Administrador"} />
     </SistemaLayout>
   );
 }

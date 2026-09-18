@@ -91,7 +91,7 @@ export default function SistemaLayout({ children, usuarioAtual, perfilAtual, onS
     .map((parte) => parte[0]?.toUpperCase() ?? "").join("") || "CS";
 
   return (
-    <div className="flex min-h-dvh bg-[#F7F8FA] text-[#273440]">
+    <div className="sistema-layout flex min-h-dvh bg-[#F7F8FA] text-[#273440]">
       <aside className={`sticky top-0 hidden h-dvh shrink-0 flex-col bg-[#0d5d86] text-white transition-[width] lg:flex ${recolhido ? "w-[74px]" : "w-72"}`}>
         <div className={`flex h-16 shrink-0 items-center px-4 ${recolhido ? "justify-center px-2" : ""}`}>
           <Marca recolhida={recolhido} />
