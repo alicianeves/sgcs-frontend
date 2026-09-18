@@ -53,6 +53,7 @@ type Draft = {
   concederAcesso: boolean;
   usuario: string;
   senha: string;
+  confirmarSenha: string;
   perfil: Perfil | "";
 };
 
@@ -77,6 +78,7 @@ const draftVazio: Draft = {
   concederAcesso: false,
   usuario: "",
   senha: "",
+  confirmarSenha: "",
   perfil: "",
 };
 
@@ -133,6 +135,7 @@ function Field({
   max,
   error,
   hint,
+  highlightHint = false,
 }: {
   id: string;
   label: string;
@@ -148,11 +151,12 @@ function Field({
   max?: string;
   error?: string;
   hint?: string;
+  highlightHint?: boolean;
 }) {
   return (
     <div className="min-w-0">
       <Label htmlFor={id} className={labelClass}>
-        {label}{required && <span aria-label="obrigatório" className="text-[#1495D6]"> *</span>}
+        {label}{required && <span aria-label="obrigatório" className="text-red-700"> *</span>}
       </Label>
       <Input
         id={id}
@@ -171,7 +175,45 @@ function Field({
         className={`${inputClass} ${readOnly ? "bg-[#f4f7f9] text-[#606b79]" : ""} ${error ? "border-red-500 focus-visible:border-red-500" : ""}`}
       />
       {error && <p id={`${id}-erro`} className="mt-1 text-xs text-red-700">{error}</p>}
-      {!error && hint && <p id={`${id}-ajuda`} className="mt-1 text-xs text-[#606b79]">{hint}</p>}
+      {!error && hint && <p id={`${id}-ajuda`} className={`mt-1 text-xs ${highlightHint ? "font-medium text-red-700" : "text-[#606b79]"}`}>{hint}</p>}
+    </div>
+  );
+}
+
+function PasswordField({ id, label, value, onChange, required, error, hint, placeholder }: {
+  id: "senha" | "confirmarSenha";
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  required: boolean;
+  error?: string;
+  hint: string;
+  placeholder: string;
+}) {
+  const [visivel, setVisivel] = useState(false);
+  return (
+    <div className="min-w-0">
+      <Label htmlFor={id} className={labelClass}>
+        {label}{required && <span aria-label="obrigatório" className="text-red-700"> *</span>}
+      </Label>
+      <div className="relative">
+        <Input
+          id={id}
+          type={visivel ? "text" : "password"}
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          autoComplete="new-password"
+          required={required}
+          aria-invalid={Boolean(error)}
+          aria-describedby={error ? `${id}-erro` : `${id}-ajuda`}
+          placeholder={placeholder}
+          className={`${inputClass} pr-11 ${error ? "border-red-500" : ""}`}
+        />
+        <button type="button" onClick={() => setVisivel((anterior) => !anterior)} aria-label={`${visivel ? "Ocultar" : "Mostrar"} ${id === "senha" ? "senha" : "confirmação de senha"}`} className="absolute inset-y-0 right-0 flex w-10 items-center justify-center rounded-r-lg text-[#606b79] hover:text-[#0d5d86] focus-visible:outline-2 focus-visible:outline-[#1495D6]">
+          {visivel ? <EyeOff size={18} /> : <Eye size={18} />}
+        </button>
+      </div>
+      {error ? <p id={`${id}-erro`} className="mt-1 text-xs text-red-700">{error}</p> : <p id={`${id}-ajuda`} className="mt-1 text-xs text-[#606b79]">{hint}</p>}
     </div>
   );
 }
@@ -191,7 +233,6 @@ export default function PessoasPage({
   const [draft, setDraft] = useState<Draft>(draftVazio);
   const [erro, setErro] = useState("");
   const [errosCampos, setErrosCampos] = useState<ErrosCampos>({});
-  const [mostrarSenha, setMostrarSenha] = useState(false);
   const [aviso, setAviso] = useState("");
 
   const pessoasFiltradas = useMemo(() => {
@@ -217,7 +258,11 @@ export default function PessoasPage({
     };
     setDraft((anterior) => ({ ...anterior, [campo]: formatadores[campo]?.(valor) ?? valor }));
     setErro("");
-    setErrosCampos((anterior) => ({ ...anterior, [campo]: undefined }));
+    setErrosCampos((anterior) => ({
+      ...anterior,
+      [campo]: undefined,
+      ...(campo === "senha" || campo === "confirmarSenha" ? { senha: undefined, confirmarSenha: undefined } : {}),
+    }));
   }
 
   function alterarTipo(tipo: TipoPessoa) {
@@ -241,7 +286,6 @@ export default function PessoasPage({
     setDraft({ ...draftVazio });
     setErro("");
     setErrosCampos({});
-    setMostrarSenha(false);
     setAviso("");
     setFormularioAberto(true);
     window.scrollTo(0, 0);
@@ -252,7 +296,6 @@ export default function PessoasPage({
     setDraft(draftDePessoa(pessoa));
     setErro("");
     setErrosCampos({});
-    setMostrarSenha(false);
     setAviso("");
     setFormularioAberto(true);
     window.scrollTo(0, 0);
@@ -293,6 +336,12 @@ export default function PessoasPage({
         }
         if (!editando && !draft.senha) falhas.senha = "Defina uma senha.";
         else if (draft.senha && draft.senha.length < 8) falhas.senha = "Use pelo menos 8 caracteres.";
+        if (editando && !draft.senha && draft.confirmarSenha) falhas.senha = "Informe a nova senha.";
+        if ((!editando || draft.senha) && !draft.confirmarSenha) {
+          falhas.confirmarSenha = "Confirme a senha.";
+        } else if (draft.confirmarSenha && draft.confirmarSenha !== draft.senha) {
+          falhas.confirmarSenha = "As senhas não coincidem.";
+        }
         if (!draft.perfil) falhas.perfil = "Selecione um perfil de acesso.";
       }
       if (editando?.tipo === "FISICA" &&
@@ -404,7 +453,7 @@ export default function PessoasPage({
     chave: CampoTexto,
     rotulo: string,
     opcoes: { required?: boolean; disabled?: boolean; readOnly?: boolean; type?: string; placeholder?: string;
-      inputMode?: "numeric" | "tel" | "email"; maxLength?: number; max?: string; hint?: string } = {},
+      inputMode?: "numeric" | "tel" | "email"; maxLength?: number; max?: string; hint?: string; highlightHint?: boolean } = {},
   ) => (
     <Field
       id={chave}
@@ -540,7 +589,6 @@ export default function PessoasPage({
           <div className="mb-7">
             <h1 className="text-[28px] font-bold tracking-tight">{editando ? "Editar pessoa" : "Cadastrar pessoa"}</h1>
             <p className="mt-1 text-sm text-[#606b79]">Preencha os dados de identificação, contato e endereço.</p>
-            <p className="mt-2 text-xs text-[#606b79]"><span className="text-[#1495D6]">*</span> Campos obrigatórios</p>
           </div>
           <form onSubmit={salvar} noValidate className="space-y-5">
             {erro && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{erro}</div>}
@@ -574,7 +622,7 @@ export default function PessoasPage({
                   {campo("nome", "Nome completo", { required: true, placeholder: "Nome da pessoa" })}
                   {campo("cpf", "CPF", { required: true, readOnly: Boolean(editando), inputMode: "numeric", maxLength: 14, placeholder: "000.000.000-00", hint: editando ? "O CPF não pode ser alterado após o cadastro." : undefined })}
                   {campo("dataNascimento", "Data de nascimento", { required: true, type: "date", max: hojeLocal() })}
-                  {campo("email", "E-mail pessoal", { required: draft.concederAcesso, type: "email", inputMode: "email", placeholder: "nome@exemplo.com", hint: draft.concederAcesso ? "Usado para contato e recuperação de senha." : "Opcional para pessoas sem acesso ao sistema." })}
+                  {campo("email", "E-mail pessoal", { required: draft.concederAcesso, type: "email", inputMode: "email", placeholder: "nome@exemplo.com", hint: draft.concederAcesso ? "Usado para contato e recuperação de senha." : "Opcional para pessoas sem acesso ao sistema.", highlightHint: draft.concederAcesso })}
                   {campo("telefone", "Telefone", { required: true, type: "tel", inputMode: "tel", placeholder: "(18) 00000-0000" })}
                 </div>
               ) : (
@@ -594,7 +642,7 @@ export default function PessoasPage({
                       checked={draft.concederAcesso}
                       onChange={(event) => {
                         setDraft((anterior) => ({ ...anterior, concederAcesso: event.target.checked }));
-                        setErrosCampos((anterior) => ({ ...anterior, concederAcesso: undefined, email: undefined, usuario: undefined, senha: undefined, perfil: undefined }));
+                        setErrosCampos((anterior) => ({ ...anterior, concederAcesso: undefined, email: undefined, usuario: undefined, senha: undefined, confirmarSenha: undefined, perfil: undefined }));
                         setErro("");
                       }}
                       aria-invalid={Boolean(errosCampos.concederAcesso)}
@@ -611,33 +659,12 @@ export default function PessoasPage({
                     <div className="mt-5 rounded-xl border border-[#d9e9f2] bg-[#f8fbfd] p-4 sm:p-5">
                       <h3 className="mb-4 text-sm font-semibold text-[#0d5d86]">Dados de acesso</h3>
                       <p className="mb-4 text-xs text-[#606b79]">Nesta prévia, as credenciais ainda não ativam o login no servidor.</p>
-                      <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+                      <div className="grid gap-5 md:grid-cols-2">
                         {campo("usuario", "Usuário de login", { required: true, placeholder: "Escolha um usuário" })}
+                        <PasswordField id="senha" label={editando ? "Nova senha" : "Senha"} value={draft.senha} onChange={(valor) => atualizar("senha", valor)} required={!editando || Boolean(draft.confirmarSenha)} error={errosCampos.senha} hint={editando ? "Deixe em branco se não quiser informar outra senha." : "Use pelo menos 8 caracteres."} placeholder={editando ? "Opcional" : "Mínimo de 8 caracteres"} />
+                        <PasswordField id="confirmarSenha" label="Confirmar senha" value={draft.confirmarSenha} onChange={(valor) => atualizar("confirmarSenha", valor)} required={!editando || Boolean(draft.senha)} error={errosCampos.confirmarSenha} hint="Digite a mesma senha novamente." placeholder="Repita a senha" />
                         <div className="min-w-0">
-                          <Label htmlFor="senha" className={labelClass}>
-                            {editando ? "Nova senha" : "Senha"}{!editando && <span aria-label="obrigatório" className="text-[#1495D6]"> *</span>}
-                          </Label>
-                          <div className="relative">
-                            <Input
-                              id="senha"
-                              type={mostrarSenha ? "text" : "password"}
-                              value={draft.senha}
-                              onChange={(event) => atualizar("senha", event.target.value)}
-                              autoComplete="new-password"
-                              required={!editando}
-                              aria-invalid={Boolean(errosCampos.senha)}
-                              aria-describedby={errosCampos.senha ? "senha-erro" : "senha-ajuda"}
-                              placeholder={editando ? "Opcional" : "Mínimo de 8 caracteres"}
-                              className={`${inputClass} pr-11 ${errosCampos.senha ? "border-red-500" : ""}`}
-                            />
-                            <button type="button" onClick={() => setMostrarSenha((valor) => !valor)} aria-label={mostrarSenha ? "Ocultar senha" : "Mostrar senha"} className="absolute inset-y-0 right-0 flex w-10 items-center justify-center rounded-r-lg text-[#606b79] hover:text-[#0d5d86] focus-visible:outline-2 focus-visible:outline-[#1495D6]">
-                              {mostrarSenha ? <EyeOff size={18} /> : <Eye size={18} />}
-                            </button>
-                          </div>
-                          {errosCampos.senha ? <p id="senha-erro" className="mt-1 text-xs text-red-700">{errosCampos.senha}</p> : <p id="senha-ajuda" className="mt-1 text-xs text-[#606b79]">{editando ? "Deixe em branco se não quiser informar outra senha." : "Use pelo menos 8 caracteres."}</p>}
-                        </div>
-                        <div className="min-w-0">
-                          <Label htmlFor="perfil" className={labelClass}>Perfil de acesso <span aria-label="obrigatório" className="text-[#1495D6]">*</span></Label>
+                          <Label htmlFor="perfil" className={labelClass}>Perfil de acesso <span aria-label="obrigatório" className="text-red-700">*</span></Label>
                           <select
                             id="perfil"
                             value={draft.perfil}
