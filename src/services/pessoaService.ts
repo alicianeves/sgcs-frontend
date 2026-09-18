@@ -45,6 +45,38 @@ export function apenasNumeros(valor: string) {
   return valor.replace(/\D/g, "");
 }
 
+export function formatarCpf(valor: string) {
+  const numeros = apenasNumeros(valor).slice(0, 11);
+  return numeros
+    .replace(/^(\d{3})(\d)/, "$1.$2")
+    .replace(/^(\d{3})\.(\d{3})(\d)/, "$1.$2.$3")
+    .replace(/\.(\d{3})(\d{1,2})$/, ".$1-$2");
+}
+
+export function formatarCnpj(valor: string) {
+  const numeros = apenasNumeros(valor).slice(0, 14);
+  return numeros
+    .replace(/^(\d{2})(\d)/, "$1.$2")
+    .replace(/^(\d{2})\.(\d{3})(\d)/, "$1.$2.$3")
+    .replace(/\.(\d{3})(\d)/, ".$1/$2")
+    .replace(/\/(\d{4})(\d)/, "/$1-$2");
+}
+
+export function formatarCep(valor: string) {
+  return apenasNumeros(valor).slice(0, 8).replace(/^(\d{5})(\d)/, "$1-$2");
+}
+
+export function formatarTelefone(valor: string) {
+  const numeros = apenasNumeros(valor).slice(0, 11);
+  if (numeros.length <= 2) return numeros ? `(${numeros}` : "";
+  const ddd = numeros.slice(0, 2);
+  const restante = numeros.slice(2);
+  const tamanhoPrefixo = numeros.length > 10 ? 5 : 4;
+  const prefixo = restante.slice(0, tamanhoPrefixo);
+  const sufixo = restante.slice(tamanhoPrefixo);
+  return `(${ddd}) ${prefixo}${sufixo ? `-${sufixo}` : ""}`;
+}
+
 function digitoVerificador(numeros: number[], pesos: number[]) {
   const soma = pesos.reduce((total, peso, indice) => total + numeros[indice] * peso, 0);
   const resto = soma % 11;
@@ -77,6 +109,10 @@ export function nomePessoa(pessoa: Pessoa) {
 
 export function documentoPessoa(pessoa: Pessoa) {
   return pessoa.tipo === "FISICA" ? pessoa.cpf : pessoa.cnpj;
+}
+
+export function documentoFormatado(pessoa: Pessoa) {
+  return pessoa.tipo === "FISICA" ? formatarCpf(pessoa.cpf) : formatarCnpj(pessoa.cnpj);
 }
 
 export function listarPessoas(): Pessoa[] {
