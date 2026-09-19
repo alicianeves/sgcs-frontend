@@ -89,9 +89,9 @@ const cardClass = "rounded-2xl border border-[#d9e1ea] bg-white p-5 shadow-sm sm
 const inputClass =
   "h-10 rounded-lg border-[#d9e1ea] bg-white px-3 text-[15px] shadow-sm md:text-[15px]";
 const formInputClass =
-  "h-11 rounded-lg border-[#d5dbe2] bg-white px-4 text-[15px] shadow-sm md:text-[15px]";
-const labelClass = "mb-2 text-[15px] font-medium text-[#273440]";
-const helperTextClass = "mt-2 text-[13px] leading-5";
+  "h-11 rounded-lg border-[#d5dbe2] bg-[#FBFDFD] px-4 text-base shadow-sm md:text-base";
+const labelClass = "mb-2 text-base font-medium text-[#273440]";
+const helperTextClass = "mt-2 text-sm leading-5";
 const nomesMeses = [
   "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
   "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
@@ -201,11 +201,11 @@ function DateField({ id, label, value, onChange, required, max, error }: {
         <div role="dialog" aria-label="Escolher data de nascimento" className="absolute left-0 top-[calc(100%+8px)] z-30 w-[min(20rem,calc(100vw-2rem))] rounded-xl border border-[#d9e1ea] bg-white p-4 shadow-xl sm:left-auto sm:right-0">
           <div className="mb-4 flex items-center justify-between">
             <button type="button" onClick={() => setMesVisivel(new Date(ano, mes - 1, 1))} aria-label="Mês anterior" className="flex size-9 items-center justify-center rounded-lg text-[#606b79] hover:bg-[#eef5f9] hover:text-[#273440]"><ChevronLeft className="size-5" /></button>
-            <strong className="text-[15px] font-semibold">{nomesMeses[mes]} de {ano}</strong>
+            <strong className="text-base font-semibold">{nomesMeses[mes]} de {ano}</strong>
             <button type="button" onClick={() => setMesVisivel(new Date(ano, mes + 1, 1))} aria-label="Próximo mês" className="flex size-9 items-center justify-center rounded-lg text-[#606b79] hover:bg-[#eef5f9] hover:text-[#273440]"><ChevronRight className="size-5" /></button>
           </div>
           <div className="grid grid-cols-7 gap-1" aria-hidden="true">
-            {diasSemana.map((dia, indice) => <span key={`${dia}-${indice}`} className="flex h-8 items-center justify-center text-xs font-medium text-[#748393]">{dia}</span>)}
+            {diasSemana.map((dia, indice) => <span key={`${dia}-${indice}`} className="flex h-8 items-center justify-center text-[13px] font-medium text-[#748393]">{dia}</span>)}
           </div>
           <div className="grid grid-cols-7 gap-1">
             {dias.map((dia, indice) => {
@@ -221,7 +221,7 @@ function DateField({ id, label, value, onChange, required, max, error }: {
                   onClick={() => selecionar(dia)}
                   aria-label={new Intl.DateTimeFormat("pt-BR", { dateStyle: "long" }).format(new Date(`${data}T12:00:00`))}
                   aria-pressed={selecionado}
-                  className={`flex size-9 items-center justify-center rounded-lg text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-30 ${selecionado ? "bg-[#1495D6] font-semibold text-white" : "text-[#273440] hover:bg-[#eaf7ff] hover:text-[#0d5d86]"}`}
+                  className={`flex size-9 items-center justify-center rounded-lg text-[15px] transition-colors disabled:cursor-not-allowed disabled:opacity-30 ${selecionado ? "bg-[#1495D6] font-semibold text-white" : "text-[#273440] hover:bg-[#eaf7ff] hover:text-[#0d5d86]"}`}
                 >
                   {dia}
                 </button>
@@ -588,7 +588,7 @@ export default function PessoasPage({
 
   return (
     <div className={`mx-auto w-full ${formularioAberto ? "max-w-[1280px]" : "max-w-[1600px]"}`}>
-      <div className={`mb-3 flex items-center gap-2 overflow-x-auto whitespace-nowrap text-[#606b79] ${formularioAberto ? "text-sm" : "text-xs"}`}>
+      <div className={`mb-3 flex items-center gap-2 overflow-x-auto whitespace-nowrap text-[#606b79] ${formularioAberto ? "text-[15px]" : "text-xs"}`}>
         <span>Sistema</span><ChevronRight size={13} /><span>Administração</span>
         <ChevronRight size={13} /><span className="text-[#273440]">Pessoas</span>
         {formularioAberto && <><ChevronRight size={13} /><span>{editando ? "Editar" : "Nova pessoa"}</span></>}
@@ -708,10 +708,10 @@ export default function PessoasPage({
         <div className="w-full">
           <div className="mb-8">
             <h1 className="text-[30px] font-bold tracking-tight">{editando ? "Editar pessoa" : "Nova pessoa"}</h1>
-            <p className="mt-1 text-[15px] leading-6 text-[#606b79]">{editando ? "Atualize os dados da pessoa no Centro Social." : "Cadastre uma nova pessoa no Centro Social."}</p>
+            <p className="mt-1 text-base leading-6 text-[#606b79]">{editando ? "Atualize os dados da pessoa no Centro Social." : "Cadastre uma nova pessoa no Centro Social."}</p>
           </div>
           <form onSubmit={salvar} noValidate className="space-y-8">
-            {erro && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{erro}</div>}
+            {erro && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-base text-red-700">{erro}</div>}
             <fieldset>
               <legend className="sr-only">Tipo de pessoa</legend>
               <div className="grid gap-3 sm:grid-cols-2">
@@ -734,8 +734,8 @@ export default function PessoasPage({
                           <Icone className="size-[18px]" aria-hidden="true" />
                         </span>
                         <span>
-                          <strong className="block text-[15px] font-semibold">Pessoa {tipo === "FISICA" ? "Física" : "Jurídica"}</strong>
-                          <small className="mt-1 block text-[13px] leading-5 text-[#606b79]">Cadastro de {tipo === "FISICA" ? "uma pessoa" : "uma organização"}</small>
+                          <strong className="block text-base font-semibold">Pessoa {tipo === "FISICA" ? "Física" : "Jurídica"}</strong>
+                          <small className="mt-1 block text-sm leading-5 text-[#606b79]">Cadastro de {tipo === "FISICA" ? "uma pessoa" : "uma organização"}</small>
                         </span>
                         {selecionado && <Check className="absolute right-4 top-4 size-4 text-[#1495D6]" aria-hidden="true" />}
                       </span>
@@ -748,8 +748,8 @@ export default function PessoasPage({
 
             <section className="border-t border-[#d9e1ea] pt-7">
               <div className="mb-5">
-                <h2 className="text-[17px] font-semibold">{draft.tipo === "FISICA" ? "Dados pessoais" : "Dados da empresa"}</h2>
-                <p className="mt-1 text-[15px] leading-6 text-[#606b79]">{draft.tipo === "FISICA" ? "Informações de identificação e contato." : "Informações de identificação e contato da organização."}</p>
+                <h2 className="text-lg font-semibold">{draft.tipo === "FISICA" ? "Dados pessoais" : "Dados da empresa"}</h2>
+                <p className="mt-1 text-base leading-6 text-[#606b79]">{draft.tipo === "FISICA" ? "Informações de identificação e contato." : "Informações de identificação e contato da organização."}</p>
               </div>
               {draft.tipo === "FISICA" ? (
                 <div className="grid gap-5 sm:grid-cols-2">
@@ -769,13 +769,13 @@ export default function PessoasPage({
             </section>
 
             {draft.tipo === "FISICA" && podeGerenciarAcesso && (
-              <section className="rounded-xl border border-[#1495D6]/25 bg-[#1495D6]/[.045] p-5 sm:p-6">
+              <section className="rounded-xl border border-[#1495D6]/25 bg-[#1495D6]/[.045] p-5 [&_input]:bg-[#F2F7FB] sm:p-6">
                 <div className="flex items-start justify-between gap-4">
                   <div>
-                    <h2 className="text-[17px] font-semibold">Acesso ao sistema</h2>
-                    <p id="acesso-ajuda" className="mt-1 text-[15px] leading-6 text-[#606b79]">Defina se esta pessoa poderá acessar o sistema.</p>
+                    <h2 className="text-lg font-semibold">Acesso ao sistema</h2>
+                    <p id="acesso-ajuda" className="mt-1 text-base leading-6 text-[#606b79]">Defina se esta pessoa poderá acessar o sistema.</p>
                   </div>
-                  <label htmlFor="concederAcesso" className="flex shrink-0 cursor-pointer items-center gap-3 text-[15px] font-medium">
+                  <label htmlFor="concederAcesso" className="flex shrink-0 cursor-pointer items-center gap-3 text-base font-medium">
                     <span className="hidden sm:inline">Conceder acesso</span>
                     <input
                       id="concederAcesso"
@@ -806,7 +806,7 @@ export default function PessoasPage({
                             required
                             aria-invalid={Boolean(errosCampos.perfil)}
                             aria-describedby={errosCampos.perfil ? "perfil-erro" : "perfil-ajuda"}
-                            className={`h-11 w-full rounded-lg border bg-white px-4 text-[15px] shadow-sm outline-none focus-visible:border-[#1495D6] focus-visible:ring-2 focus-visible:ring-[#1495D6]/30 ${errosCampos.perfil ? "border-red-500" : "border-[#d5dbe2]"}`}
+                            className={`h-11 w-full rounded-lg border bg-[#F2F7FB] px-4 text-base shadow-sm outline-none focus-visible:border-[#1495D6] focus-visible:ring-2 focus-visible:ring-[#1495D6]/30 ${errosCampos.perfil ? "border-red-500" : "border-[#d5dbe2]"}`}
                           >
                             <option value="">Selecione o nível de acesso</option>
                             {perfis.map((perfil) => <option key={perfil} value={perfil}>{perfil}</option>)}
@@ -816,17 +816,17 @@ export default function PessoasPage({
                         <PasswordField id="senha" label={editando ? "Nova senha" : "Senha"} value={draft.senha} onChange={(valor) => atualizar("senha", valor)} required={!editando || Boolean(draft.confirmarSenha)} error={errosCampos.senha} hint={editando ? "Deixe em branco se não quiser informar outra senha." : "Use pelo menos 8 caracteres."} placeholder={editando ? "Opcional" : "Mínimo de 8 caracteres"} />
                         <PasswordField id="confirmarSenha" label="Confirmar senha" value={draft.confirmarSenha} onChange={(valor) => atualizar("confirmarSenha", valor)} required={!editando || Boolean(draft.senha)} error={errosCampos.confirmarSenha} hint="Digite a mesma senha novamente." placeholder="Repita a senha" />
                   </div>
-                ) : <p className="mt-5 border-t border-[#1495D6]/20 pt-4 text-[15px] leading-6 text-[#606b79]">Esta pessoa não terá acesso ao sistema.</p>}
+                ) : <p className="mt-5 border-t border-[#1495D6]/20 pt-4 text-base leading-6 text-[#606b79]">Esta pessoa não terá acesso ao sistema.</p>}
               </section>
             )}
             {draft.tipo === "FISICA" && !podeGerenciarAcesso && (
-              <p className="border-t border-[#d9e1ea] pt-5 text-[15px] leading-6 text-[#606b79]">Somente administradores podem conceder ou alterar o acesso ao sistema.</p>
+              <p className="border-t border-[#d9e1ea] pt-5 text-base leading-6 text-[#606b79]">Somente administradores podem conceder ou alterar o acesso ao sistema.</p>
             )}
 
             <section className="border-t border-[#d9e1ea] pt-7">
               <div className="mb-5">
-                <h2 className="text-[17px] font-semibold">Endereço</h2>
-                <p className="mt-1 text-[15px] leading-6 text-[#606b79]">Informações de localização.</p>
+                <h2 className="text-lg font-semibold">Endereço</h2>
+                <p className="mt-1 text-base leading-6 text-[#606b79]">Informações de localização.</p>
               </div>
               <div className="grid gap-5 md:grid-cols-[minmax(180px,.7fr)_minmax(240px,1.5fr)_minmax(180px,.6fr)]">
                 {campo("cep", "CEP", { required: true, inputMode: "numeric", maxLength: 9, placeholder: "00000-000" })}
@@ -839,8 +839,8 @@ export default function PessoasPage({
             </section>
 
             <div className="flex justify-end gap-3 border-t border-[#d9e1ea] pb-8 pt-6">
-              <Button type="button" variant="ghost" onClick={voltar} className="h-10 px-4 text-[15px]">Cancelar</Button>
-              <Button type="submit" className="h-10 bg-[#1495D6] px-5 text-[15px] text-white hover:bg-[#117eb5]">{editando ? "Salvar alterações" : "Salvar pessoa"}</Button>
+              <Button type="button" variant="ghost" onClick={voltar} className="h-10 px-4 text-base">Cancelar</Button>
+              <Button type="submit" className="h-10 bg-[#1495D6] px-5 text-base text-white hover:bg-[#117eb5]">{editando ? "Salvar alterações" : "Salvar pessoa"}</Button>
             </div>
           </form>
         </div>
