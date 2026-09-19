@@ -1,9 +1,10 @@
-import { useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import {
   ArrowUpDown,
   Building2,
   CalendarDays,
   Check,
+  ChevronLeft,
   ChevronRight,
   Eye,
   EyeOff,
@@ -91,6 +92,11 @@ const formInputClass =
   "h-11 rounded-lg border-[#d5dbe2] bg-white px-4 text-[15px] shadow-sm md:text-[15px]";
 const labelClass = "mb-2 text-[15px] font-medium text-[#273440]";
 const helperTextClass = "mt-2 text-[13px] leading-5";
+const nomesMeses = [
+  "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+  "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
+];
+const diasSemana = ["D", "S", "T", "Q", "Q", "S", "S"];
 
 function hojeLocal() {
   const data = new Date();
@@ -123,6 +129,110 @@ function draftDePessoa(pessoa: Pessoa): Draft {
         }
       : { razaoSocial: pessoa.razaoSocial, cnpj: formatarCnpj(pessoa.cnpj) }),
   };
+}
+
+function DateField({ id, label, value, onChange, required, max, error }: {
+  id: string;
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  required: boolean;
+  max?: string;
+  error?: string;
+}) {
+  const dataSelecionada = value ? new Date(`${value}T12:00:00`) : null;
+  const [aberto, setAberto] = useState(false);
+  const [mesVisivel, setMesVisivel] = useState(() => dataSelecionada ?? new Date());
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!aberto) return;
+    function fecharFora(event: PointerEvent) {
+      if (!containerRef.current?.contains(event.target as Node)) setAberto(false);
+    }
+    function fecharEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") setAberto(false);
+    }
+    document.addEventListener("pointerdown", fecharFora);
+    document.addEventListener("keydown", fecharEscape);
+    return () => {
+      document.removeEventListener("pointerdown", fecharFora);
+      document.removeEventListener("keydown", fecharEscape);
+    };
+  }, [aberto]);
+
+  const ano = mesVisivel.getFullYear();
+  const mes = mesVisivel.getMonth();
+  const primeiroDia = new Date(ano, mes, 1).getDay();
+  const totalDias = new Date(ano, mes + 1, 0).getDate();
+  const dias = Array.from({ length: primeiroDia + totalDias }, (_, indice) =>
+    indice < primeiroDia ? null : indice - primeiroDia + 1,
+  );
+
+  function selecionar(dia: number) {
+    const data = `${ano}-${String(mes + 1).padStart(2, "0")}-${String(dia).padStart(2, "0")}`;
+    onChange(data);
+    setAberto(false);
+  }
+
+  const valorVisivel = dataSelecionada
+    ? new Intl.DateTimeFormat("pt-BR").format(dataSelecionada)
+    : "dd/mm/aaaa";
+
+  return (
+    <div ref={containerRef} className="relative min-w-0">
+      <Label htmlFor={id} className={labelClass}>
+        {label}{required && <span aria-label="obrigatório" className="text-red-700"> *</span>}
+      </Label>
+      <button
+        id={id}
+        type="button"
+        onClick={() => setAberto((anterior) => !anterior)}
+        aria-expanded={aberto}
+        aria-haspopup="dialog"
+        aria-invalid={Boolean(error)}
+        aria-describedby={error ? `${id}-erro` : undefined}
+        className={`${formInputClass} flex w-full items-center justify-between text-left outline-none focus-visible:border-[#1495D6] focus-visible:ring-2 focus-visible:ring-[#1495D6]/30 ${value ? "text-[#273440]" : "text-[#657384]"} ${error ? "border-red-500" : ""}`}
+      >
+        <span>{valorVisivel}</span>
+        <CalendarDays className="size-[18px] shrink-0 text-[#657384]" aria-hidden="true" />
+      </button>
+      {aberto && (
+        <div role="dialog" aria-label="Escolher data de nascimento" className="absolute left-0 top-[calc(100%+8px)] z-30 w-[min(20rem,calc(100vw-2rem))] rounded-xl border border-[#d9e1ea] bg-white p-4 shadow-xl sm:left-auto sm:right-0">
+          <div className="mb-4 flex items-center justify-between">
+            <button type="button" onClick={() => setMesVisivel(new Date(ano, mes - 1, 1))} aria-label="Mês anterior" className="flex size-9 items-center justify-center rounded-lg text-[#606b79] hover:bg-[#eef5f9] hover:text-[#273440]"><ChevronLeft className="size-5" /></button>
+            <strong className="text-[15px] font-semibold">{nomesMeses[mes]} de {ano}</strong>
+            <button type="button" onClick={() => setMesVisivel(new Date(ano, mes + 1, 1))} aria-label="Próximo mês" className="flex size-9 items-center justify-center rounded-lg text-[#606b79] hover:bg-[#eef5f9] hover:text-[#273440]"><ChevronRight className="size-5" /></button>
+          </div>
+          <div className="grid grid-cols-7 gap-1" aria-hidden="true">
+            {diasSemana.map((dia, indice) => <span key={`${dia}-${indice}`} className="flex h-8 items-center justify-center text-xs font-medium text-[#748393]">{dia}</span>)}
+          </div>
+          <div className="grid grid-cols-7 gap-1">
+            {dias.map((dia, indice) => {
+              if (!dia) return <span key={`vazio-${indice}`} />;
+              const data = `${ano}-${String(mes + 1).padStart(2, "0")}-${String(dia).padStart(2, "0")}`;
+              const selecionado = data === value;
+              const desabilitado = Boolean(max && data > max);
+              return (
+                <button
+                  key={data}
+                  type="button"
+                  disabled={desabilitado}
+                  onClick={() => selecionar(dia)}
+                  aria-label={new Intl.DateTimeFormat("pt-BR", { dateStyle: "long" }).format(new Date(`${data}T12:00:00`))}
+                  aria-pressed={selecionado}
+                  className={`flex size-9 items-center justify-center rounded-lg text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-30 ${selecionado ? "bg-[#1495D6] font-semibold text-white" : "text-[#273440] hover:bg-[#eaf7ff] hover:text-[#0d5d86]"}`}
+                >
+                  {dia}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+      {error && <p id={`${id}-erro`} className={`${helperTextClass} text-red-700`}>{error}</p>}
+    </div>
+  );
 }
 
 function Field({
@@ -158,6 +268,10 @@ function Field({
   hint?: string;
   highlightHint?: boolean;
 }) {
+  if (type === "date") {
+    return <DateField id={id} label={label} value={value} onChange={onChange} required={required} max={max} error={error} />;
+  }
+
   return (
     <div className="min-w-0">
       <Label htmlFor={id} className={labelClass}>
@@ -178,9 +292,8 @@ function Field({
           max={max}
           aria-invalid={Boolean(error)}
           aria-describedby={error ? `${id}-erro` : hint ? `${id}-ajuda` : undefined}
-          className={`${formInputClass} ${readOnly ? "bg-[#edf1f5] text-[#606b79]" : ""} ${type === "date" ? "cursor-pointer pr-11 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:inset-y-0 [&::-webkit-calendar-picker-indicator]:right-0 [&::-webkit-calendar-picker-indicator]:h-full [&::-webkit-calendar-picker-indicator]:w-11 [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-0" : ""} ${error ? "border-red-500 focus-visible:border-red-500" : ""}`}
+          className={`${formInputClass} ${readOnly ? "bg-[#edf1f5] text-[#606b79]" : ""} ${error ? "border-red-500 focus-visible:border-red-500" : ""}`}
         />
-        {type === "date" && <CalendarDays className="pointer-events-none absolute right-3.5 top-1/2 size-[18px] -translate-y-1/2 text-[#657384]" aria-hidden="true" />}
       </div>
       {error && <p id={`${id}-erro`} className={`${helperTextClass} text-red-700`}>{error}</p>}
       {!error && hint && <p id={`${id}-ajuda`} className={`${helperTextClass} ${highlightHint ? "text-red-700" : "text-[#606b79]"}`}>{hint}</p>}
