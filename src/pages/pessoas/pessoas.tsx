@@ -6,6 +6,7 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
+  CircleAlert,
   Eye,
   EyeOff,
   Pencil,
@@ -89,7 +90,7 @@ const cardClass = "rounded-2xl border border-[#d9e1ea] bg-white p-5 shadow-sm sm
 const inputClass =
   "h-10 rounded-lg border-[#d9e1ea] bg-white px-3 text-[15px] shadow-sm md:text-[15px]";
 const formInputClass =
-  "h-11 rounded-lg border-[#d5dbe2] bg-[#FBFDFD] px-4 text-base shadow-sm md:text-base";
+  "h-11 rounded-lg border border-[#d5dbe2] bg-[#FBFDFD] px-4 text-base shadow-sm md:text-base";
 const labelClass = "mb-2 text-base font-medium text-[#273440]";
 const helperTextClass = "mt-2 text-sm leading-5";
 const nomesMeses = [
@@ -97,6 +98,19 @@ const nomesMeses = [
   "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
 ];
 const diasSemana = ["D", "S", "T", "Q", "Q", "S", "S"];
+
+function FieldMessage({ id, children, tone = "muted" }: {
+  id: string;
+  children: string;
+  tone?: "error" | "muted";
+}) {
+  return (
+    <p id={id} className={`${helperTextClass} flex items-start gap-1.5 ${tone === "error" ? "text-red-700" : "text-[#606b79]"}`}>
+      <CircleAlert className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+      <span>{children}</span>
+    </p>
+  );
+}
 
 function hojeLocal() {
   const data = new Date();
@@ -211,7 +225,7 @@ function DateField({ id, label, value, onChange, required, max, error }: {
         aria-haspopup="dialog"
         aria-invalid={Boolean(error)}
         aria-describedby={error ? `${id}-erro` : undefined}
-        className={`${formInputClass} flex w-full items-center justify-between text-left outline-none focus-visible:border-[#1495D6] focus-visible:ring-2 focus-visible:ring-[#1495D6]/30 ${value ? "text-[#273440]" : "text-[#657384]"} ${error ? "border-red-500" : ""}`}
+        className={`${formInputClass} flex w-full items-center justify-between text-left outline-none focus-visible:border-[#1495D6] focus-visible:ring-2 focus-visible:ring-[#1495D6]/30 aria-invalid:border-red-500 aria-invalid:ring-2 aria-invalid:ring-red-500/20 ${value ? "text-[#273440]" : "text-[#657384]"}`}
       >
         <span>{valorVisivel}</span>
         <CalendarDays className="size-[18px] shrink-0 text-[#657384]" aria-hidden="true" />
@@ -254,7 +268,7 @@ function DateField({ id, label, value, onChange, required, max, error }: {
           </div>
         </div>
       )}
-      {error && <p id={`${id}-erro`} className={`${helperTextClass} text-red-700`}>{error}</p>}
+      {error && <FieldMessage id={`${id}-erro`} tone="error">{error}</FieldMessage>}
     </div>
   );
 }
@@ -319,8 +333,8 @@ function Field({
           className={`${formInputClass} ${readOnly ? "bg-[#edf1f5] text-[#606b79]" : ""} ${error ? "border-red-500 focus-visible:border-red-500" : ""}`}
         />
       </div>
-      {error && <p id={`${id}-erro`} className={`${helperTextClass} text-red-700`}>{error}</p>}
-      {!error && hint && <p id={`${id}-ajuda`} className={`${helperTextClass} ${highlightHint ? "text-red-700" : "text-[#606b79]"}`}>{hint}</p>}
+      {error && <FieldMessage id={`${id}-erro`} tone="error">{error}</FieldMessage>}
+      {!error && hint && <FieldMessage id={`${id}-ajuda`} tone={highlightHint ? "error" : "muted"}>{hint}</FieldMessage>}
     </div>
   );
 }
@@ -358,8 +372,8 @@ function PasswordField({ id, label, value, onChange, required, error, hint, plac
           {visivel ? <EyeOff size={18} /> : <Eye size={18} />}
         </button>
       </div>
-      {error && <p id={`${id}-erro`} className={`${helperTextClass} text-red-700`}>{error}</p>}
-      {!error && hint && <p id={`${id}-ajuda`} className={`${helperTextClass} text-[#606b79]`}>{hint}</p>}
+      {error && <FieldMessage id={`${id}-erro`} tone="error">{error}</FieldMessage>}
+      {!error && hint && <FieldMessage id={`${id}-ajuda`}>{hint}</FieldMessage>}
     </div>
   );
 }
@@ -818,7 +832,7 @@ export default function PessoasPage({
                     <span aria-hidden="true" className="relative h-6 w-11 rounded-full bg-[#d9e1ea] transition-colors peer-checked:bg-[#1495D6] peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-[#1495D6] after:absolute after:left-0.5 after:top-0.5 after:size-5 after:rounded-full after:bg-white after:shadow-sm after:transition-transform peer-checked:after:translate-x-5" />
                   </label>
                 </div>
-                {errosCampos.concederAcesso && <p id="acesso-erro" className={`${helperTextClass} text-red-700`}>{errosCampos.concederAcesso}</p>}
+                {errosCampos.concederAcesso && <FieldMessage id="acesso-erro" tone="error">{errosCampos.concederAcesso}</FieldMessage>}
                 {draft.concederAcesso ? (
                   <div className="mt-6 grid gap-5 border-t border-[#1495D6]/20 pt-5 sm:grid-cols-2">
                         {campo("usuario", "Usuário", { required: true, placeholder: "Digite o usuário de acesso" })}
@@ -836,7 +850,7 @@ export default function PessoasPage({
                             <option value="">Selecione o nível de acesso</option>
                             {perfis.map((perfil) => <option key={perfil} value={perfil}>{perfil}</option>)}
                           </select>
-                          {errosCampos.perfil && <p id="perfil-erro" className={`${helperTextClass} text-red-700`}>{errosCampos.perfil}</p>}
+                          {errosCampos.perfil && <FieldMessage id="perfil-erro" tone="error">{errosCampos.perfil}</FieldMessage>}
                         </div>
                         <PasswordField id="senha" label={editando ? "Nova senha" : "Senha"} value={draft.senha} onChange={(valor) => atualizar("senha", valor)} required={!editando || Boolean(draft.confirmarSenha)} error={errosCampos.senha} hint={editando ? "Deixe em branco se não quiser informar outra senha." : undefined} placeholder={editando ? "Opcional" : "Mínimo de 8 caracteres"} />
                         <PasswordField id="confirmarSenha" label="Confirmar senha" value={draft.confirmarSenha} onChange={(valor) => atualizar("confirmarSenha", valor)} required={!editando || Boolean(draft.senha)} error={errosCampos.confirmarSenha} placeholder="Repita a senha" />
