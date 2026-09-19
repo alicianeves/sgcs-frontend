@@ -163,6 +163,18 @@ function DateField({ id, label, value, onChange, required, max, error }: {
 
   const ano = mesVisivel.getFullYear();
   const mes = mesVisivel.getMonth();
+  const anoMinimo = Math.min(1900, dataSelecionada?.getFullYear() ?? 1900);
+  const anoMaximo = max ? Number(max.slice(0, 4)) : new Date().getFullYear();
+  const anosDisponiveis = Array.from(
+    { length: anoMaximo - anoMinimo + 1 },
+    (_, indice) => anoMaximo - indice,
+  );
+  const chaveMesAtual = ano * 12 + mes;
+  const chaveMesMinimo = anoMinimo * 12;
+  const dataMaxima = max ? new Date(`${max}T12:00:00`) : null;
+  const chaveMesMaximo = dataMaxima
+    ? dataMaxima.getFullYear() * 12 + dataMaxima.getMonth()
+    : anoMaximo * 12 + 11;
   const primeiroDia = new Date(ano, mes, 1).getDay();
   const totalDias = new Date(ano, mes + 1, 0).getDate();
   const dias = Array.from({ length: primeiroDia + totalDias }, (_, indice) =>
@@ -173,6 +185,13 @@ function DateField({ id, label, value, onChange, required, max, error }: {
     const data = `${ano}-${String(mes + 1).padStart(2, "0")}-${String(dia).padStart(2, "0")}`;
     onChange(data);
     setAberto(false);
+  }
+
+  function alterarAno(novoAno: number) {
+    const ultimoMesPermitido = dataMaxima && novoAno === anoMaximo
+      ? dataMaxima.getMonth()
+      : 11;
+    setMesVisivel(new Date(novoAno, Math.min(mes, ultimoMesPermitido), 1));
   }
 
   const valorVisivel = dataSelecionada
@@ -198,11 +217,16 @@ function DateField({ id, label, value, onChange, required, max, error }: {
         <CalendarDays className="size-[18px] shrink-0 text-[#657384]" aria-hidden="true" />
       </button>
       {aberto && (
-        <div role="dialog" aria-label="Escolher data de nascimento" className="absolute left-0 top-[calc(100%+8px)] z-30 w-[min(20rem,calc(100vw-2rem))] rounded-xl border border-[#d9e1ea] bg-white p-4 shadow-xl sm:left-auto sm:right-0">
-          <div className="mb-4 flex items-center justify-between">
-            <button type="button" onClick={() => setMesVisivel(new Date(ano, mes - 1, 1))} aria-label="Mês anterior" className="flex size-9 items-center justify-center rounded-lg text-[#606b79] hover:bg-[#eef5f9] hover:text-[#273440]"><ChevronLeft className="size-5" /></button>
-            <strong className="text-base font-semibold">{nomesMeses[mes]} de {ano}</strong>
-            <button type="button" onClick={() => setMesVisivel(new Date(ano, mes + 1, 1))} aria-label="Próximo mês" className="flex size-9 items-center justify-center rounded-lg text-[#606b79] hover:bg-[#eef5f9] hover:text-[#273440]"><ChevronRight className="size-5" /></button>
+        <div role="dialog" aria-label="Escolher data de nascimento" className="absolute left-0 top-[calc(100%+8px)] z-30 w-[min(22rem,calc(100vw-2rem))] rounded-xl border border-[#d9e1ea] bg-white p-4 shadow-xl sm:left-auto sm:right-0">
+          <div className="mb-4 flex items-center gap-2">
+            <button type="button" disabled={chaveMesAtual <= chaveMesMinimo} onClick={() => setMesVisivel(new Date(ano, mes - 1, 1))} aria-label="Mês anterior" className="flex size-9 shrink-0 items-center justify-center rounded-lg text-[#606b79] hover:bg-[#eef5f9] hover:text-[#273440] disabled:cursor-not-allowed disabled:opacity-30"><ChevronLeft className="size-5" /></button>
+            <select aria-label="Mês" value={mes} onChange={(event) => setMesVisivel(new Date(ano, Number(event.target.value), 1))} className="h-9 min-w-0 flex-1 rounded-lg border border-[#d9e1ea] bg-[#FBFDFD] px-2 text-sm font-medium outline-none focus-visible:border-[#1495D6] focus-visible:ring-2 focus-visible:ring-[#1495D6]/30">
+              {nomesMeses.map((nome, indice) => <option key={nome} value={indice} disabled={Boolean(dataMaxima && ano === anoMaximo && indice > dataMaxima.getMonth())}>{nome}</option>)}
+            </select>
+            <select aria-label="Ano" value={ano} onChange={(event) => alterarAno(Number(event.target.value))} className="h-9 w-24 shrink-0 rounded-lg border border-[#d9e1ea] bg-[#FBFDFD] px-2 text-sm font-medium outline-none focus-visible:border-[#1495D6] focus-visible:ring-2 focus-visible:ring-[#1495D6]/30">
+              {anosDisponiveis.map((anoDisponivel) => <option key={anoDisponivel} value={anoDisponivel}>{anoDisponivel}</option>)}
+            </select>
+            <button type="button" disabled={chaveMesAtual >= chaveMesMaximo} onClick={() => setMesVisivel(new Date(ano, mes + 1, 1))} aria-label="Próximo mês" className="flex size-9 shrink-0 items-center justify-center rounded-lg text-[#606b79] hover:bg-[#eef5f9] hover:text-[#273440] disabled:cursor-not-allowed disabled:opacity-30"><ChevronRight className="size-5" /></button>
           </div>
           <div className="grid grid-cols-7 gap-1" aria-hidden="true">
             {diasSemana.map((dia, indice) => <span key={`${dia}-${indice}`} className="flex h-8 items-center justify-center text-[13px] font-medium text-[#748393]">{dia}</span>)}
@@ -308,7 +332,7 @@ function PasswordField({ id, label, value, onChange, required, error, hint, plac
   onChange: (value: string) => void;
   required: boolean;
   error?: string;
-  hint: string;
+  hint?: string;
   placeholder: string;
 }) {
   const [visivel, setVisivel] = useState(false);
@@ -326,7 +350,7 @@ function PasswordField({ id, label, value, onChange, required, error, hint, plac
           autoComplete="new-password"
           required={required}
           aria-invalid={Boolean(error)}
-          aria-describedby={error ? `${id}-erro` : `${id}-ajuda`}
+          aria-describedby={error ? `${id}-erro` : hint ? `${id}-ajuda` : undefined}
           placeholder={placeholder}
           className={`${formInputClass} pr-11 ${error ? "border-red-500" : ""}`}
         />
@@ -334,7 +358,8 @@ function PasswordField({ id, label, value, onChange, required, error, hint, plac
           {visivel ? <EyeOff size={18} /> : <Eye size={18} />}
         </button>
       </div>
-      {error ? <p id={`${id}-erro`} className={`${helperTextClass} text-red-700`}>{error}</p> : <p id={`${id}-ajuda`} className={`${helperTextClass} text-[#606b79]`}>{hint}</p>}
+      {error && <p id={`${id}-erro`} className={`${helperTextClass} text-red-700`}>{error}</p>}
+      {!error && hint && <p id={`${id}-ajuda`} className={`${helperTextClass} text-[#606b79]`}>{hint}</p>}
     </div>
   );
 }
@@ -456,7 +481,7 @@ export default function PessoasPage({
           falhas.usuario = "Este usuário já está em uso.";
         }
         if (!editando && !draft.senha) falhas.senha = "Defina uma senha.";
-        else if (draft.senha && draft.senha.length < 8) falhas.senha = "Use pelo menos 8 caracteres.";
+        else if (draft.senha && draft.senha.length < 8) falhas.senha = "A senha deve conter no mínimo 8 caracteres.";
         if (editando && !draft.senha && draft.confirmarSenha) falhas.senha = "Informe a nova senha.";
         if ((!editando || draft.senha) && !draft.confirmarSenha) {
           falhas.confirmarSenha = "Confirme a senha.";
@@ -805,16 +830,16 @@ export default function PessoasPage({
                             onChange={(event) => atualizar("perfil", event.target.value as Perfil | "")}
                             required
                             aria-invalid={Boolean(errosCampos.perfil)}
-                            aria-describedby={errosCampos.perfil ? "perfil-erro" : "perfil-ajuda"}
+                            aria-describedby={errosCampos.perfil ? "perfil-erro" : undefined}
                             className={`h-11 w-full rounded-lg border bg-[#F2F7FB] px-4 text-base shadow-sm outline-none focus-visible:border-[#1495D6] focus-visible:ring-2 focus-visible:ring-[#1495D6]/30 ${errosCampos.perfil ? "border-red-500" : "border-[#d5dbe2]"}`}
                           >
                             <option value="">Selecione o nível de acesso</option>
                             {perfis.map((perfil) => <option key={perfil} value={perfil}>{perfil}</option>)}
                           </select>
-                          {errosCampos.perfil ? <p id="perfil-erro" className={`${helperTextClass} text-red-700`}>{errosCampos.perfil}</p> : <p id="perfil-ajuda" className={`${helperTextClass} text-[#606b79]`}>Define as áreas disponíveis.</p>}
+                          {errosCampos.perfil && <p id="perfil-erro" className={`${helperTextClass} text-red-700`}>{errosCampos.perfil}</p>}
                         </div>
-                        <PasswordField id="senha" label={editando ? "Nova senha" : "Senha"} value={draft.senha} onChange={(valor) => atualizar("senha", valor)} required={!editando || Boolean(draft.confirmarSenha)} error={errosCampos.senha} hint={editando ? "Deixe em branco se não quiser informar outra senha." : "Use pelo menos 8 caracteres."} placeholder={editando ? "Opcional" : "Mínimo de 8 caracteres"} />
-                        <PasswordField id="confirmarSenha" label="Confirmar senha" value={draft.confirmarSenha} onChange={(valor) => atualizar("confirmarSenha", valor)} required={!editando || Boolean(draft.senha)} error={errosCampos.confirmarSenha} hint="Digite a mesma senha novamente." placeholder="Repita a senha" />
+                        <PasswordField id="senha" label={editando ? "Nova senha" : "Senha"} value={draft.senha} onChange={(valor) => atualizar("senha", valor)} required={!editando || Boolean(draft.confirmarSenha)} error={errosCampos.senha} hint={editando ? "Deixe em branco se não quiser informar outra senha." : undefined} placeholder={editando ? "Opcional" : "Mínimo de 8 caracteres"} />
+                        <PasswordField id="confirmarSenha" label="Confirmar senha" value={draft.confirmarSenha} onChange={(valor) => atualizar("confirmarSenha", valor)} required={!editando || Boolean(draft.senha)} error={errosCampos.confirmarSenha} placeholder="Repita a senha" />
                   </div>
                 ) : <p className="mt-5 border-t border-[#1495D6]/20 pt-4 text-base leading-6 text-[#606b79]">Esta pessoa não terá acesso ao sistema.</p>}
               </section>
