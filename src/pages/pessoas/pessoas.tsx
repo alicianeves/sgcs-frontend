@@ -2,6 +2,7 @@ import { useMemo, useState, type FormEvent } from "react";
 import {
   ArrowUpDown,
   Building2,
+  CalendarDays,
   Check,
   ChevronRight,
   Eye,
@@ -87,8 +88,9 @@ const cardClass = "rounded-2xl border border-[#d9e1ea] bg-white p-5 shadow-sm sm
 const inputClass =
   "h-10 rounded-lg border-[#d9e1ea] bg-white px-3 text-[15px] shadow-sm md:text-[15px]";
 const formInputClass =
-  "h-9 rounded-lg border-[#d5dbe2] bg-transparent px-3 text-sm shadow-none md:text-sm";
-const labelClass = "mb-2 text-sm font-medium text-[#273440]";
+  "h-11 rounded-lg border-[#d5dbe2] bg-white px-4 text-[15px] shadow-sm md:text-[15px]";
+const labelClass = "mb-2 text-[15px] font-medium text-[#273440]";
+const helperTextClass = "mt-2 text-[13px] leading-5";
 
 function hojeLocal() {
   const data = new Date();
@@ -161,24 +163,27 @@ function Field({
       <Label htmlFor={id} className={labelClass}>
         {label}{required && <span aria-label="obrigatório" className="text-red-700"> *</span>}
       </Label>
-      <Input
-        id={id}
-        type={type}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        required={required}
-        disabled={disabled}
-        readOnly={readOnly}
-        placeholder={placeholder}
-        inputMode={inputMode}
-        maxLength={maxLength}
-        max={max}
-        aria-invalid={Boolean(error)}
-        aria-describedby={error ? `${id}-erro` : hint ? `${id}-ajuda` : undefined}
-        className={`${formInputClass} ${readOnly ? "bg-[#edf1f5] text-[#606b79]" : ""} ${error ? "border-red-500 focus-visible:border-red-500" : ""}`}
-      />
-      {error && <p id={`${id}-erro`} className="mt-1 text-xs text-red-700">{error}</p>}
-      {!error && hint && <p id={`${id}-ajuda`} className={`mt-1 text-xs ${highlightHint ? "font-medium text-red-700" : "text-[#606b79]"}`}>{hint}</p>}
+      <div className="relative">
+        <Input
+          id={id}
+          type={type}
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          required={required}
+          disabled={disabled}
+          readOnly={readOnly}
+          placeholder={placeholder}
+          inputMode={inputMode}
+          maxLength={maxLength}
+          max={max}
+          aria-invalid={Boolean(error)}
+          aria-describedby={error ? `${id}-erro` : hint ? `${id}-ajuda` : undefined}
+          className={`${formInputClass} ${readOnly ? "bg-[#edf1f5] text-[#606b79]" : ""} ${type === "date" ? "cursor-pointer pr-11 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:inset-y-0 [&::-webkit-calendar-picker-indicator]:right-0 [&::-webkit-calendar-picker-indicator]:h-full [&::-webkit-calendar-picker-indicator]:w-11 [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-0" : ""} ${error ? "border-red-500 focus-visible:border-red-500" : ""}`}
+        />
+        {type === "date" && <CalendarDays className="pointer-events-none absolute right-3.5 top-1/2 size-[18px] -translate-y-1/2 text-[#657384]" aria-hidden="true" />}
+      </div>
+      {error && <p id={`${id}-erro`} className={`${helperTextClass} text-red-700`}>{error}</p>}
+      {!error && hint && <p id={`${id}-ajuda`} className={`${helperTextClass} ${highlightHint ? "text-red-700" : "text-[#606b79]"}`}>{hint}</p>}
     </div>
   );
 }
@@ -216,7 +221,7 @@ function PasswordField({ id, label, value, onChange, required, error, hint, plac
           {visivel ? <EyeOff size={18} /> : <Eye size={18} />}
         </button>
       </div>
-      {error ? <p id={`${id}-erro`} className="mt-1 text-xs text-red-700">{error}</p> : <p id={`${id}-ajuda`} className="mt-1 text-xs text-[#606b79]">{hint}</p>}
+      {error ? <p id={`${id}-erro`} className={`${helperTextClass} text-red-700`}>{error}</p> : <p id={`${id}-ajuda`} className={`${helperTextClass} text-[#606b79]`}>{hint}</p>}
     </div>
   );
 }
@@ -469,8 +474,8 @@ export default function PessoasPage({
   );
 
   return (
-    <div className="mx-auto w-full max-w-[1600px]">
-      <div className="mb-3 flex items-center gap-2 text-xs text-[#606b79]">
+    <div className={`mx-auto w-full ${formularioAberto ? "max-w-[1280px]" : "max-w-[1600px]"}`}>
+      <div className={`mb-3 flex items-center gap-2 overflow-x-auto whitespace-nowrap text-[#606b79] ${formularioAberto ? "text-sm" : "text-xs"}`}>
         <span>Sistema</span><ChevronRight size={13} /><span>Administração</span>
         <ChevronRight size={13} /><span className="text-[#273440]">Pessoas</span>
         {formularioAberto && <><ChevronRight size={13} /><span>{editando ? "Editar" : "Nova pessoa"}</span></>}
@@ -587,10 +592,10 @@ export default function PessoasPage({
           </section>
         </>
       ) : (
-        <div className="mx-auto w-full max-w-[1280px]">
-          <div className="mb-7">
-            <h1 className="text-[28px] font-bold tracking-tight">{editando ? "Editar pessoa" : "Nova pessoa"}</h1>
-            <p className="mt-1 text-sm text-[#606b79]">{editando ? "Atualize os dados da pessoa no Centro Social." : "Cadastre uma nova pessoa no Centro Social."}</p>
+        <div className="w-full">
+          <div className="mb-8">
+            <h1 className="text-[30px] font-bold tracking-tight">{editando ? "Editar pessoa" : "Nova pessoa"}</h1>
+            <p className="mt-1 text-[15px] leading-6 text-[#606b79]">{editando ? "Atualize os dados da pessoa no Centro Social." : "Cadastre uma nova pessoa no Centro Social."}</p>
           </div>
           <form onSubmit={salvar} noValidate className="space-y-8">
             {erro && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{erro}</div>}
@@ -611,13 +616,13 @@ export default function PessoasPage({
                         onChange={() => alterarTipo(tipo)}
                         className="peer sr-only"
                       />
-                      <span className={`relative flex min-h-[92px] items-center gap-3 rounded-xl border p-4 text-left transition-colors peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-[#1495D6] ${selecionado ? "border-[#1495D6] bg-[#1495D6]/[.045] ring-1 ring-[#1495D6]/20" : "border-[#d9e1ea] bg-white hover:border-[#1495D6]/50"} ${editando ? "opacity-80" : ""}`}>
-                        <span className={`flex size-9 shrink-0 items-center justify-center rounded-full ${selecionado ? "bg-[#1495D6] text-white" : "bg-[#edf1f4] text-[#748393]"}`}>
-                          <Icone className="size-4" aria-hidden="true" />
+                      <span className={`relative flex min-h-[104px] items-center gap-4 rounded-xl border p-5 text-left transition-colors peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-[#1495D6] ${selecionado ? "border-[#1495D6] bg-[#1495D6]/[.045] ring-1 ring-[#1495D6]/20" : "border-[#d9e1ea] bg-white hover:border-[#1495D6]/50"} ${editando ? "opacity-80" : ""}`}>
+                        <span className={`flex size-10 shrink-0 items-center justify-center rounded-full ${selecionado ? "bg-[#1495D6] text-white" : "bg-[#edf1f4] text-[#748393]"}`}>
+                          <Icone className="size-[18px]" aria-hidden="true" />
                         </span>
                         <span>
-                          <strong className="block text-sm font-semibold">Pessoa {tipo === "FISICA" ? "Física" : "Jurídica"}</strong>
-                          <small className="mt-1 block text-xs text-[#606b79]">Cadastro de {tipo === "FISICA" ? "uma pessoa" : "uma organização"}</small>
+                          <strong className="block text-[15px] font-semibold">Pessoa {tipo === "FISICA" ? "Física" : "Jurídica"}</strong>
+                          <small className="mt-1 block text-[13px] leading-5 text-[#606b79]">Cadastro de {tipo === "FISICA" ? "uma pessoa" : "uma organização"}</small>
                         </span>
                         {selecionado && <Check className="absolute right-4 top-4 size-4 text-[#1495D6]" aria-hidden="true" />}
                       </span>
@@ -625,13 +630,13 @@ export default function PessoasPage({
                   );
                 })}
               </div>
-              {editando && <p className="mt-2 text-xs text-[#606b79]">O tipo de pessoa não pode ser alterado após o cadastro.</p>}
+              {editando && <p className={`${helperTextClass} text-[#606b79]`}>O tipo de pessoa não pode ser alterado após o cadastro.</p>}
             </fieldset>
 
             <section className="border-t border-[#d9e1ea] pt-7">
               <div className="mb-5">
-                <h2 className="font-semibold">{draft.tipo === "FISICA" ? "Dados pessoais" : "Dados da empresa"}</h2>
-                <p className="mt-1 text-sm text-[#606b79]">{draft.tipo === "FISICA" ? "Informações de identificação e contato." : "Informações de identificação e contato da organização."}</p>
+                <h2 className="text-[17px] font-semibold">{draft.tipo === "FISICA" ? "Dados pessoais" : "Dados da empresa"}</h2>
+                <p className="mt-1 text-[15px] leading-6 text-[#606b79]">{draft.tipo === "FISICA" ? "Informações de identificação e contato." : "Informações de identificação e contato da organização."}</p>
               </div>
               {draft.tipo === "FISICA" ? (
                 <div className="grid gap-5 sm:grid-cols-2">
@@ -654,10 +659,10 @@ export default function PessoasPage({
               <section className="rounded-xl border border-[#1495D6]/25 bg-[#1495D6]/[.045] p-5 sm:p-6">
                 <div className="flex items-start justify-between gap-4">
                   <div>
-                    <h2 className="font-semibold">Acesso ao sistema</h2>
-                    <p id="acesso-ajuda" className="mt-1 text-sm text-[#606b79]">Defina se esta pessoa poderá acessar o sistema.</p>
+                    <h2 className="text-[17px] font-semibold">Acesso ao sistema</h2>
+                    <p id="acesso-ajuda" className="mt-1 text-[15px] leading-6 text-[#606b79]">Defina se esta pessoa poderá acessar o sistema.</p>
                   </div>
-                  <label htmlFor="concederAcesso" className="flex shrink-0 cursor-pointer items-center gap-3 text-sm font-medium">
+                  <label htmlFor="concederAcesso" className="flex shrink-0 cursor-pointer items-center gap-3 text-[15px] font-medium">
                     <span className="hidden sm:inline">Conceder acesso</span>
                     <input
                       id="concederAcesso"
@@ -672,10 +677,10 @@ export default function PessoasPage({
                       aria-describedby={errosCampos.concederAcesso ? "acesso-ajuda acesso-erro" : "acesso-ajuda"}
                       className="peer sr-only"
                     />
-                    <span aria-hidden="true" className="relative h-5 w-9 rounded-full bg-[#d9e1ea] transition-colors peer-checked:bg-[#1495D6] peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-[#1495D6] after:absolute after:left-0.5 after:top-0.5 after:size-4 after:rounded-full after:bg-white after:shadow-sm after:transition-transform peer-checked:after:translate-x-4" />
+                    <span aria-hidden="true" className="relative h-6 w-11 rounded-full bg-[#d9e1ea] transition-colors peer-checked:bg-[#1495D6] peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-[#1495D6] after:absolute after:left-0.5 after:top-0.5 after:size-5 after:rounded-full after:bg-white after:shadow-sm after:transition-transform peer-checked:after:translate-x-5" />
                   </label>
                 </div>
-                {errosCampos.concederAcesso && <p id="acesso-erro" className="mt-2 text-xs text-red-700">{errosCampos.concederAcesso}</p>}
+                {errosCampos.concederAcesso && <p id="acesso-erro" className={`${helperTextClass} text-red-700`}>{errosCampos.concederAcesso}</p>}
                 {draft.concederAcesso ? (
                   <div className="mt-6 grid gap-5 border-t border-[#1495D6]/20 pt-5 sm:grid-cols-2">
                         {campo("usuario", "Usuário", { required: true, placeholder: "Digite o usuário de acesso" })}
@@ -688,27 +693,27 @@ export default function PessoasPage({
                             required
                             aria-invalid={Boolean(errosCampos.perfil)}
                             aria-describedby={errosCampos.perfil ? "perfil-erro" : "perfil-ajuda"}
-                            className={`h-9 w-full rounded-lg border bg-transparent px-3 text-sm shadow-none outline-none focus-visible:border-[#1495D6] focus-visible:ring-2 focus-visible:ring-[#1495D6]/30 ${errosCampos.perfil ? "border-red-500" : "border-[#d5dbe2]"}`}
+                            className={`h-11 w-full rounded-lg border bg-white px-4 text-[15px] shadow-sm outline-none focus-visible:border-[#1495D6] focus-visible:ring-2 focus-visible:ring-[#1495D6]/30 ${errosCampos.perfil ? "border-red-500" : "border-[#d5dbe2]"}`}
                           >
                             <option value="">Selecione o nível de acesso</option>
                             {perfis.map((perfil) => <option key={perfil} value={perfil}>{perfil}</option>)}
                           </select>
-                          {errosCampos.perfil ? <p id="perfil-erro" className="mt-1 text-xs text-red-700">{errosCampos.perfil}</p> : <p id="perfil-ajuda" className="mt-1 text-xs text-[#606b79]">Define as áreas disponíveis.</p>}
+                          {errosCampos.perfil ? <p id="perfil-erro" className={`${helperTextClass} text-red-700`}>{errosCampos.perfil}</p> : <p id="perfil-ajuda" className={`${helperTextClass} text-[#606b79]`}>Define as áreas disponíveis.</p>}
                         </div>
                         <PasswordField id="senha" label={editando ? "Nova senha" : "Senha"} value={draft.senha} onChange={(valor) => atualizar("senha", valor)} required={!editando || Boolean(draft.confirmarSenha)} error={errosCampos.senha} hint={editando ? "Deixe em branco se não quiser informar outra senha." : "Use pelo menos 8 caracteres."} placeholder={editando ? "Opcional" : "Mínimo de 8 caracteres"} />
                         <PasswordField id="confirmarSenha" label="Confirmar senha" value={draft.confirmarSenha} onChange={(valor) => atualizar("confirmarSenha", valor)} required={!editando || Boolean(draft.senha)} error={errosCampos.confirmarSenha} hint="Digite a mesma senha novamente." placeholder="Repita a senha" />
                   </div>
-                ) : <p className="mt-5 border-t border-[#1495D6]/20 pt-4 text-sm text-[#606b79]">Esta pessoa não terá acesso ao sistema.</p>}
+                ) : <p className="mt-5 border-t border-[#1495D6]/20 pt-4 text-[15px] leading-6 text-[#606b79]">Esta pessoa não terá acesso ao sistema.</p>}
               </section>
             )}
             {draft.tipo === "FISICA" && !podeGerenciarAcesso && (
-              <p className="border-t border-[#d9e1ea] pt-5 text-sm text-[#606b79]">Somente administradores podem conceder ou alterar o acesso ao sistema.</p>
+              <p className="border-t border-[#d9e1ea] pt-5 text-[15px] leading-6 text-[#606b79]">Somente administradores podem conceder ou alterar o acesso ao sistema.</p>
             )}
 
             <section className="border-t border-[#d9e1ea] pt-7">
               <div className="mb-5">
-                <h2 className="font-semibold">Endereço</h2>
-                <p className="mt-1 text-sm text-[#606b79]">Informações de localização.</p>
+                <h2 className="text-[17px] font-semibold">Endereço</h2>
+                <p className="mt-1 text-[15px] leading-6 text-[#606b79]">Informações de localização.</p>
               </div>
               <div className="grid gap-5 md:grid-cols-[minmax(180px,.7fr)_minmax(240px,1.5fr)_minmax(180px,.6fr)]">
                 {campo("cep", "CEP", { required: true, inputMode: "numeric", maxLength: 9, placeholder: "00000-000" })}
@@ -721,8 +726,8 @@ export default function PessoasPage({
             </section>
 
             <div className="flex justify-end gap-3 border-t border-[#d9e1ea] pb-8 pt-6">
-              <Button type="button" variant="ghost" onClick={voltar} className="h-9 px-4">Cancelar</Button>
-              <Button type="submit" className="h-9 bg-[#1495D6] px-4 text-white hover:bg-[#117eb5]">{editando ? "Salvar alterações" : "Salvar pessoa"}</Button>
+              <Button type="button" variant="ghost" onClick={voltar} className="h-10 px-4 text-[15px]">Cancelar</Button>
+              <Button type="submit" className="h-10 bg-[#1495D6] px-5 text-[15px] text-white hover:bg-[#117eb5]">{editando ? "Salvar alterações" : "Salvar pessoa"}</Button>
             </div>
           </form>
         </div>
