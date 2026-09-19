@@ -2,6 +2,7 @@ import { useState, type ReactNode } from "react";
 import {
   Bell,
   ChevronDown,
+  HeartHandshake,
   LogOut,
   Menu,
   PanelLeftClose,
@@ -22,8 +23,8 @@ type Props = {
 function Marca({ recolhida = false }: { recolhida?: boolean }) {
   return (
     <div className="flex items-center gap-3">
-      <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-white p-1">
-        <img src="/logo.png" alt="" className="max-h-full max-w-full object-contain" />
+      <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-white/15 text-white">
+        <HeartHandshake className="size-5" aria-hidden="true" />
       </span>
       {!recolhida && (
         <span className="min-w-0 text-left">
@@ -92,7 +93,7 @@ export default function SistemaLayout({ children, usuarioAtual, perfilAtual, onS
 
   return (
     <div className="sistema-layout flex min-h-dvh bg-[#F7F8FA] text-[#273440]">
-      <aside className={`sticky top-0 hidden h-dvh shrink-0 flex-col bg-[#0d5d86] text-white transition-[width] lg:flex ${recolhido ? "w-[74px]" : "w-72"}`}>
+      <aside className={`sticky top-0 hidden h-dvh shrink-0 flex-col bg-[#237FAF] text-white transition-[width] lg:flex ${recolhido ? "w-[74px]" : "w-72"}`}>
         <div className={`flex h-16 shrink-0 items-center px-4 ${recolhido ? "justify-center px-2" : ""}`}>
           <Marca recolhida={recolhido} />
         </div>
@@ -118,7 +119,7 @@ export default function SistemaLayout({ children, usuarioAtual, perfilAtual, onS
       {mobileAberto && (
         <div className="fixed inset-0 z-50 lg:hidden">
           <button type="button" aria-label="Fechar menu" onClick={() => setMobileAberto(false)} className="absolute inset-0 bg-[#273440]/45" />
-          <aside className="absolute inset-y-0 left-0 flex w-72 flex-col bg-[#0d5d86] text-white">
+          <aside className="absolute inset-y-0 left-0 flex w-72 flex-col bg-[#237FAF] text-white">
             <div className="flex h-16 items-center justify-between px-4">
               <Marca />
               <button type="button" onClick={() => setMobileAberto(false)} aria-label="Fechar menu"><X className="size-5" /></button>
