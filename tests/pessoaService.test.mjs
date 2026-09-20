@@ -1,0 +1,102 @@
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import { afterEach, test } from "node:test";
+import ts from "typescript";
+
+const source = await readFile(new URL("../src/services/pessoaService.ts", import.meta.url), "utf8");
+const { outputText } = ts.transpileModule(source, {
+  compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
+});
+const service = await import(`data:text/javascript;base64,${Buffer.from(outputText).toString("base64")}`);
+const originalFetch = globalThis.fetch;
+const originalStorage = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
+
+afterEach(() => {
+  globalThis.fetch = originalFetch;
+  if (originalStorage) Object.defineProperty(globalThis, "localStorage", originalStorage);
+  else delete globalThis.localStorage;
+});
+
+function storage(token = "test-token") {
+  Object.defineProperty(globalThis, "localStorage", {
+    configurable: true,
+    value: { getItem(key) { assert.equal(key, "token"); return token; } },
+  });
+}
+
+test("listing authenticates and converts numeric IDs and backend roles", async () => {
+  storage();
+  globalThis.fetch = async (url, options) => {
+    assert.equal(url, "http://localhost:8080/api/pessoas");
+    assert.equal(options.headers.Authorization, "Bearer test-token");
+    return Response.json([{ id: 42, tipo: "FISICA", perfil: "ATENDIMENTO_GESTAO", usuario: "ana" }]);
+  };
+  const [pessoa] = await service.listarPessoas();
+  assert.equal(pessoa.id, "42");
+  assert.equal(pessoa.perfil, "Atendimento/Gestão");
+});
+
+test("creation sends password and API role to the physical person route", async () => {
+  storage();
+  globalThis.fetch = async (url, options) => {
+    assert.equal(url, "http://localhost:8080/api/pessoas/fisicas");
+    assert.equal(options.method, "POST");
+    assert.equal(options.headers["Content-Type"], "application/json");
+    assert.deepEqual(JSON.parse(options.body), { nome: "Ana", perfil: "ADMINISTRADOR", senha: "password123" });
+    return Response.json({ id: 12, tipo: "FISICA", perfil: "ADMINISTRADOR", usuario: "ana" });
+  };
+  const result = await service.salvarPessoa({ tipo: "FISICA", nome: "Ana", perfil: "Administrador", senha: "password123" });
+  assert.equal(result.id, "12");
+});
+
+test("editing omits an empty password, preserving the existing credential", async () => {
+  storage();
+  globalThis.fetch = async (url, options) => {
+    assert.equal(url, "http://localhost:8080/api/pessoas/fisicas/12");
+    assert.equal(options.method, "PUT");
+    assert.equal(Object.hasOwn(JSON.parse(options.body), "senha"), false);
+    return Response.json({ id: 12, tipo: "FISICA", perfil: "COLABORADOR", usuario: "ana" });
+  };
+  await service.salvarPessoa({ tipo: "FISICA", perfil: "Colaborador", senha: "" }, "12");
+});
+
+test("legal persons use their own endpoint without access fields", async () => {
+  storage();
+  globalThis.fetch = async (url, options) => {
+    assert.equal(url, "http://localhost:8080/api/pessoas/juridicas");
+    assert.deepEqual(JSON.parse(options.body), { razaoSocial: "Empresa", cnpj: "12345678000199" });
+    return Response.json({ id: 13, tipo: "JURIDICA", razaoSocial: "Empresa" });
+  };
+  assert.equal((await service.salvarPessoa({ tipo: "JURIDICA", razaoSocial: "Empresa", cnpj: "12345678000199" })).tipo, "JURIDICA");
+});
+
+test("inactivation accepts an empty 204 response", async () => {
+  storage();
+  globalThis.fetch = async (url, options) => {
+    assert.equal(url, "http://localhost:8080/api/pessoas/12");
+    assert.equal(options.method, "DELETE");
+    return new Response(null, { status: 204 });
+  };
+  await service.inativarPessoa("12");
+});
+
+test("backend validation and conflict messages are preserved", async () => {
+  storage();
+  for (const status of [400, 409]) {
+    globalThis.fetch = async () => Response.json({ message: "CPF já cadastrado." }, { status });
+    await assert.rejects(service.salvarPessoa({ tipo: "FISICA" }), /CPF já cadastrado/);
+  }
+});
+
+test("authentication, permission and network failures are reported", async () => {
+  storage(null);
+  globalThis.fetch = () => assert.fail("Must not request without a token");
+  await assert.rejects(service.listarPessoas(), /sessão expirou/);
+  storage();
+  for (const [status, message] of [[401, /sessão expirou/], [403, /permissão/], [500, /concluir a operação/]]) {
+    globalThis.fetch = async () => new Response("", { status });
+    await assert.rejects(service.listarPessoas(), message);
+  }
+  globalThis.fetch = async () => { throw new TypeError("Failed to fetch"); };
+  await assert.rejects(service.listarPessoas(), /conectar ao servidor/);
+});

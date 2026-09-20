@@ -39,7 +39,75 @@ export type Pessoa =
       cnpj: string;
     });
 
-const STORAGE_KEY = "sgcs-pessoas";
+const API_URL = "http://localhost:8080/api/pessoas";
+
+const perfisApi = {
+  Administrador: "ADMINISTRADOR",
+  "Atendimento/Gestão": "ATENDIMENTO_GESTAO",
+  Colaborador: "COLABORADOR",
+  "Professor/Instrutor": "PROFESSOR_INSTRUTOR",
+} as const;
+
+type PessoaApi = Omit<PessoaBase, "id"> & {
+  id: number;
+  nome: string;
+  cpf: string;
+  dataNascimento: string;
+  email: string;
+  usuario: string | null;
+  perfil: string | null;
+  razaoSocial: string;
+  cnpj: string;
+};
+
+export type DadosPessoa = Omit<PessoaBase, "id" | "status" | "dataCriacao" | "dataInativacao"> & {
+  nome?: string;
+  cpf?: string;
+  dataNascimento?: string;
+  email?: string;
+  usuario?: string;
+  perfil?: Perfil | "";
+  senha?: string;
+  razaoSocial?: string;
+  cnpj?: string;
+};
+
+function converterPessoa(dados: PessoaApi): Pessoa {
+  const base = { ...dados, id: String(dados.id) };
+  if (dados.tipo === "JURIDICA") return { ...base, tipo: "JURIDICA" };
+  return {
+    ...base,
+    tipo: "FISICA",
+    usuario: dados.usuario ?? "",
+    perfil: perfis.find((perfil) => perfisApi[perfil] === dados.perfil) ?? "",
+  };
+}
+
+async function requisitar(caminho = "", opcoes: RequestInit = {}): Promise<Response> {
+  const token = localStorage.getItem("token");
+  if (!token) throw new Error("Sua sessão expirou. Entre novamente no sistema.");
+  let resposta: Response;
+  try {
+    resposta = await fetch(`${API_URL}${caminho}`, {
+      ...opcoes,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        ...(opcoes.body ? { "Content-Type": "application/json" } : {}),
+      },
+    });
+  } catch {
+    throw new Error("Não foi possível conectar ao servidor. Tente novamente.");
+  }
+  if (!resposta.ok) {
+    if (resposta.status === 401) throw new Error("Sua sessão expirou. Entre novamente no sistema.");
+    if (resposta.status === 403) throw new Error("Você não tem permissão para realizar esta operação.");
+    const erro: unknown = await resposta.json().catch(() => null);
+    const mensagem = erro && typeof erro === "object" && "message" in erro && typeof erro.message === "string"
+      ? erro.message : "Não foi possível concluir a operação. Tente novamente.";
+    throw new Error(mensagem);
+  }
+  return resposta;
+}
 
 export function apenasNumeros(valor: string) {
   return valor.replace(/\D/g, "");
@@ -115,16 +183,28 @@ export function documentoFormatado(pessoa: Pessoa) {
   return pessoa.tipo === "FISICA" ? formatarCpf(pessoa.cpf) : formatarCnpj(pessoa.cnpj);
 }
 
-export function listarPessoas(): Pessoa[] {
-  try {
-    const valor = localStorage.getItem(STORAGE_KEY);
-    const pessoas: unknown = valor ? JSON.parse(valor) : [];
-    return Array.isArray(pessoas) ? (pessoas as Pessoa[]) : [];
-  } catch {
-    return [];
-  }
+export async function listarPessoas(signal?: AbortSignal): Promise<Pessoa[]> {
+  const resposta = await requisitar("", { signal });
+  const pessoas: PessoaApi[] = await resposta.json();
+  return pessoas.map(converterPessoa);
 }
 
-export function salvarPessoas(pessoas: Pessoa[]) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(pessoas));
+export async function salvarPessoa(dados: DadosPessoa, id?: string): Promise<Pessoa> {
+  const { tipo, perfil, senha, ...campos } = dados;
+  const caminho = tipo === "FISICA" ? "/fisicas" : "/juridicas";
+  const resposta = await requisitar(`${caminho}${id ? `/${encodeURIComponent(id)}` : ""}`, {
+    method: id ? "PUT" : "POST",
+    body: JSON.stringify({
+      ...campos,
+      ...(tipo === "FISICA" ? {
+        perfil: perfil ? perfisApi[perfil] : null,
+        ...(senha ? { senha } : {}),
+      } : {}),
+    }),
+  });
+  return converterPessoa(await resposta.json());
+}
+
+export async function inativarPessoa(id: string): Promise<void> {
+  await requisitar(`/${encodeURIComponent(id)}`, { method: "DELETE" });
 }

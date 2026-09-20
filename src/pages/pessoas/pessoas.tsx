@@ -33,7 +33,9 @@ import {
   listarPessoas,
   nomePessoa,
   perfis,
-  salvarPessoas,
+  salvarPessoa,
+  inativarPessoa,
+  type DadosPessoa,
   type Perfil,
   type Pessoa,
   type TipoPessoa,
@@ -385,7 +387,35 @@ export default function PessoasPage({
   usuarioAtual: string;
   podeGerenciarAcesso: boolean;
 }) {
-  const [pessoas, setPessoas] = useState<Pessoa[]>(listarPessoas);
+  const [pessoas, setPessoas] = useState<Pessoa[]>([]);
+  const [carregando, setCarregando] = useState(true);
+  const [erroListagem, setErroListagem] = useState("");
+  const [tentativa, setTentativa] = useState(0);
+  const [salvando, setSalvando] = useState(false);
+  const [inativando, setInativando] = useState<string | null>(null);
+  const operacaoEmCurso = useRef(false);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    listarPessoas(controller.signal)
+      .then((dados) => {
+        if (!controller.signal.aborted) setPessoas(dados);
+      })
+      .catch((error: unknown) => {
+        if (!controller.signal.aborted) setErroListagem(error instanceof Error ? error.message : "Não foi possível carregar as pessoas.");
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setCarregando(false);
+      });
+    return () => controller.abort();
+  }, [tentativa]);
+
+  function tentarNovamente() {
+    setCarregando(true);
+    setErroListagem("");
+    setTentativa((valor) => valor + 1);
+  }
+
   const [busca, setBusca] = useState("");
   const [ordemAscendente, setOrdemAscendente] = useState(true);
   const [editando, setEditando] = useState<Pessoa | null>(null);
@@ -532,8 +562,9 @@ export default function PessoasPage({
     return falhas;
   }
 
-  function salvar(event: FormEvent<HTMLFormElement>) {
+  async function salvar(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (operacaoEmCurso.current) return;
     const falhas = validar();
     if (Object.keys(falhas).length > 0) {
       setErrosCampos(falhas);
@@ -546,7 +577,6 @@ export default function PessoasPage({
     }
 
     const base = {
-      id: editando?.id ?? crypto.randomUUID(),
       telefone: apenasNumeros(draft.telefone),
       cep: apenasNumeros(draft.cep),
       logradouro: draft.logradouro.trim(),
@@ -554,11 +584,8 @@ export default function PessoasPage({
       bairro: draft.bairro.trim(),
       cidade: draft.cidade.trim(),
       estado: draft.estado.trim().toUpperCase(),
-      status: editando?.status ?? true,
-      dataCriacao: editando?.dataCriacao ?? new Date().toISOString(),
-      dataInativacao: editando?.dataInativacao ?? null,
     };
-    const pessoa: Pessoa = draft.tipo === "FISICA"
+    const dados: DadosPessoa = draft.tipo === "FISICA"
       ? {
           ...base,
           tipo: "FISICA",
@@ -568,6 +595,7 @@ export default function PessoasPage({
           email: draft.email.trim(),
           usuario: draft.concederAcesso ? draft.usuario.trim() : "",
           perfil: draft.concederAcesso ? draft.perfil : "",
+          senha: draft.concederAcesso ? draft.senha : undefined,
         }
       : {
           ...base,
@@ -576,36 +604,43 @@ export default function PessoasPage({
           cnpj: apenasNumeros(draft.cnpj),
         };
 
-    const atualizadas = editando
-      ? pessoas.map((item) => item.id === editando.id ? pessoa : item)
-      : [...pessoas, pessoa];
+    operacaoEmCurso.current = true;
+    setSalvando(true);
+    setErro("");
     try {
-      salvarPessoas(atualizadas);
-      setPessoas(atualizadas);
+      const pessoa = await salvarPessoa(dados, editando?.id);
+      setPessoas((anteriores) => editando
+        ? anteriores.map((item) => item.id === pessoa.id ? pessoa : item)
+        : [...anteriores, pessoa]);
       voltar();
-      setAviso(draft.concederAcesso
-        ? "Pessoa salva neste navegador. O acesso ao sistema depende da integração com o backend."
-        : `Pessoa ${editando ? "atualizada" : "cadastrada"} neste navegador.`);
-    } catch {
-      setErro("Não foi possível salvar os dados neste navegador.");
+      setAviso(editando ? "Pessoa atualizada com sucesso." : "Pessoa cadastrada com sucesso.");
+    } catch (error) {
+      setErro(error instanceof Error ? error.message : "Não foi possível salvar a pessoa.");
+    } finally {
+      operacaoEmCurso.current = false;
+      setSalvando(false);
     }
   }
 
-  function alternarStatus(pessoa: Pessoa) {
-    if (pessoa.tipo === "FISICA" && pessoa.status &&
+  async function inativar(pessoa: Pessoa) {
+    if (operacaoEmCurso.current) return;
+    if (pessoa.tipo === "FISICA" &&
         pessoa.usuario.toLocaleLowerCase("pt-BR") === usuarioAtual.toLocaleLowerCase("pt-BR")) {
       setAviso("Você não pode inativar seu próprio cadastro.");
       return;
     }
-    const atualizadas = pessoas.map((item): Pessoa => item.id === pessoa.id
-      ? { ...item, status: !item.status, dataInativacao: item.status ? new Date().toISOString() : null }
-      : item);
+    operacaoEmCurso.current = true;
+    setInativando(pessoa.id);
+    setAviso("");
     try {
-      salvarPessoas(atualizadas);
-      setPessoas(atualizadas);
-      setAviso(`Pessoa ${pessoa.status ? "inativada" : "reativada"} neste navegador.`);
-    } catch {
-      setAviso("Não foi possível alterar o status neste navegador.");
+      await inativarPessoa(pessoa.id);
+      setPessoas((anteriores) => anteriores.filter((item) => item.id !== pessoa.id));
+      setAviso("Pessoa inativada com sucesso.");
+    } catch (error) {
+      setAviso(error instanceof Error ? error.message : "Não foi possível inativar a pessoa.");
+    } finally {
+      operacaoEmCurso.current = false;
+      setInativando(null);
     }
   }
 
@@ -647,7 +682,7 @@ export default function PessoasPage({
               <h1 className="text-[28px] font-bold tracking-tight">Gerenciamento de pessoas</h1>
               <p className="mt-1 text-sm text-[#606b79]">Cadastre e acompanhe pessoas físicas e jurídicas em um só lugar.</p>
             </div>
-            <Button type="button" onClick={abrirCadastro} className="h-10 gap-2 bg-[#1495D6] px-4 text-white hover:bg-[#117eb5]">
+            <Button type="button" disabled={carregando || Boolean(erroListagem) || inativando !== null} onClick={abrirCadastro} className="h-10 gap-2 bg-[#1495D6] px-4 text-white hover:bg-[#117eb5]">
               <Plus size={17} /> Nova pessoa
             </Button>
           </div>
@@ -676,12 +711,19 @@ export default function PessoasPage({
               </div>
             </div>
 
-            {pessoasFiltradas.length === 0 ? (
+            {carregando ? (
+              <p role="status" className="py-10 text-center">Carregando pessoas...</p>
+            ) : erroListagem ? (
+              <div role="alert" className="py-10 text-center text-red-700">
+                <p>{erroListagem}</p>
+                <Button type="button" variant="outline" onClick={tentarNovamente} className="mt-4">Tentar novamente</Button>
+              </div>
+            ) : pessoasFiltradas.length === 0 ? (
               <div className="flex flex-col items-center py-16 text-center">
                 <span className="flex size-14 items-center justify-center rounded-2xl bg-[#eaf7ff] text-[#1495D6]"><UsersRound size={27} /></span>
                 <h3 className="mt-4 font-semibold">{busca ? "Nenhuma pessoa encontrada" : "Nenhuma pessoa cadastrada"}</h3>
                 <p className="mt-1 max-w-sm text-sm text-[#606b79]">{busca ? "Tente outro nome ou documento." : "Comece cadastrando a primeira pessoa física ou jurídica."}</p>
-                {!busca && <Button type="button" onClick={abrirCadastro} className="mt-5 bg-[#1495D6] text-white hover:bg-[#117eb5]"><Plus size={16} /> Nova pessoa</Button>}
+                {!busca && <Button type="button" disabled={carregando || Boolean(erroListagem) || inativando !== null} onClick={abrirCadastro} className="mt-5 bg-[#1495D6] text-white hover:bg-[#117eb5]"><Plus size={16} /> Nova pessoa</Button>}
               </div>
             ) : (
               <>
@@ -689,14 +731,14 @@ export default function PessoasPage({
                 {pessoasFiltradas.map((pessoa) => (
                   <div key={pessoa.id} className="rounded-xl border border-[#e5eaf0] p-4">
                     <div className="flex items-start justify-between gap-3">
-                      <button type="button" onClick={() => abrirEdicao(pessoa)} className="text-left font-semibold hover:text-[#1495D6]">{nomePessoa(pessoa)}</button>
+                      <button type="button" disabled={inativando !== null} onClick={() => abrirEdicao(pessoa)} className="text-left font-semibold hover:text-[#1495D6]">{nomePessoa(pessoa)}</button>
                       <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${pessoa.status ? "bg-[#e6f7ee] text-[#19704b]" : "bg-[#f1f3f5] text-[#606b79]"}`}>{pessoa.status ? "Ativa" : "Inativa"}</span>
                     </div>
                     <p className="mt-1 text-sm text-[#606b79]">Pessoa {pessoa.tipo === "FISICA" ? "física" : "jurídica"} · {documentoFormatado(pessoa)}</p>
                     <p className="mt-1 text-sm text-[#606b79]">{formatarTelefone(pessoa.telefone)}</p>
                     <div className="mt-3 flex gap-3 border-t border-[#e5eaf0] pt-3 text-sm font-medium text-[#0d5d86]">
-                      <button type="button" onClick={() => abrirEdicao(pessoa)}>Editar</button>
-                      <button type="button" onClick={() => alternarStatus(pessoa)}>{pessoa.status ? "Inativar" : "Ativar"}</button>
+                      <button type="button" disabled={inativando !== null} onClick={() => abrirEdicao(pessoa)}>Editar</button>
+                      <button type="button" disabled={inativando !== null} onClick={() => inativar(pessoa)}>{inativando === pessoa.id ? "Inativando..." : "Inativar"}</button>
                     </div>
                   </div>
                 ))}
@@ -722,7 +764,7 @@ export default function PessoasPage({
                     {pessoasFiltradas.map((pessoa) => (
                       <tr key={pessoa.id} className="border-b border-[#edf0f3] last:border-0">
                         <td className="py-4 pr-4 font-medium">
-                          <button type="button" onClick={() => abrirEdicao(pessoa)} className="text-left hover:text-[#1495D6]">{nomePessoa(pessoa)}</button>
+                          <button type="button" disabled={inativando !== null} onClick={() => abrirEdicao(pessoa)} className="text-left hover:text-[#1495D6]">{nomePessoa(pessoa)}</button>
                         </td>
                         <td className="py-4 pr-4 text-[#606b79]">{pessoa.tipo === "FISICA" ? "Física" : "Jurídica"}</td>
                         <td className="py-4 pr-4 text-[#606b79]">{documentoFormatado(pessoa)}</td>
@@ -730,8 +772,8 @@ export default function PessoasPage({
                         <td className="py-4 pr-4"><span className={`rounded-full px-2.5 py-1 text-xs font-medium ${pessoa.status ? "bg-[#e6f7ee] text-[#19704b]" : "bg-[#f1f3f5] text-[#606b79]"}`}>{pessoa.status ? "Ativa" : "Inativa"}</span></td>
                         <td className="py-4 text-right">
                           <div className="flex justify-end gap-2">
-                            <button type="button" onClick={() => abrirEdicao(pessoa)} className="rounded-lg p-2 text-[#606b79] hover:bg-[#eaf7ff] hover:text-[#1495D6]" aria-label={`Editar ${nomePessoa(pessoa)}`}><Pencil size={16} /></button>
-                            <button type="button" onClick={() => alternarStatus(pessoa)} className="rounded-lg px-2 py-1 text-xs font-medium text-[#0d5d86] hover:bg-[#eaf7ff]">{pessoa.status ? "Inativar" : "Ativar"}</button>
+                            <button type="button" disabled={inativando !== null} onClick={() => abrirEdicao(pessoa)} className="rounded-lg p-2 text-[#606b79] hover:bg-[#eaf7ff] hover:text-[#1495D6]" aria-label={`Editar ${nomePessoa(pessoa)}`}><Pencil size={16} /></button>
+                            <button type="button" disabled={inativando !== null} onClick={() => inativar(pessoa)} className="rounded-lg px-2 py-1 text-xs font-medium text-[#0d5d86] hover:bg-[#eaf7ff]">{inativando === pessoa.id ? "Inativando..." : "Inativar"}</button>
                           </div>
                         </td>
                       </tr>
@@ -749,7 +791,8 @@ export default function PessoasPage({
             <h1 className="text-[30px] font-bold tracking-tight">{editando ? "Editar pessoa" : "Nova pessoa"}</h1>
             <p className="mt-1 text-base leading-6 text-[#606b79]">{editando ? "Atualize os dados da pessoa no Centro Social." : "Cadastre uma nova pessoa no Centro Social."}</p>
           </div>
-          <form onSubmit={salvar} noValidate className="space-y-8">
+          <form onSubmit={salvar} noValidate aria-busy={salvando}>
+            <fieldset disabled={salvando} className="space-y-8">
             {erro && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-base text-red-700">{erro}</div>}
             <fieldset>
               <legend className="sr-only">Tipo de pessoa</legend>
@@ -879,8 +922,9 @@ export default function PessoasPage({
 
             <div className="flex justify-end gap-3 border-t border-[#d9e1ea] pb-8 pt-6">
               <Button type="button" variant="ghost" onClick={voltar} className="h-10 px-4 text-base">Cancelar</Button>
-              <Button type="submit" className="h-10 bg-[#1495D6] px-5 text-base text-white hover:bg-[#117eb5]">{editando ? "Salvar alterações" : "Salvar pessoa"}</Button>
+              <Button type="submit" className="h-10 bg-[#1495D6] px-5 text-base text-white hover:bg-[#117eb5]">{salvando ? "Salvando..." : editando ? "Salvar alterações" : "Salvar pessoa"}</Button>
             </div>
+            </fieldset>
           </form>
         </div>
       )}
