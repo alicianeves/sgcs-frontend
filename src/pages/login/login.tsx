@@ -106,7 +106,7 @@ function Login({ onSuccess }: { onSuccess: (usuario: string) => void }) {
             <InstitutionBrand compact />
           </div>
 
-          <div className="mt-9 mb-9">
+          <div className="mt-4 mb-6">
             <h2 className="text-[26px] font-bold tracking-tight text-[#292f38]">Entrar no sistema</h2>
             <p className="mt-1 text-[15px] text-[#606b79]">Acesso restrito aos colaboradores.</p>
           </div>
@@ -115,13 +115,13 @@ function Login({ onSuccess }: { onSuccess: (usuario: string) => void }) {
             {erro && <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{erro}</p>}
             <div className="space-y-1.5">
               <Label htmlFor="usuario" className="text-[15px] font-medium text-[#292f38]">
-                Usuário / e-mail
+                Usuário
               </Label>
               <Input
                 id="usuario"
                 type="text"
                 autoComplete="username"
-                placeholder="nome@santarita.org.br"
+                placeholder="Digite seu usuário"
                 value={usuario}
                 onChange={(e) => setUsuario(e.target.value)}
                 className="h-10 rounded-lg border-[#d9e1ea] bg-transparent px-3 text-[15px] shadow-sm placeholder:text-[#606b79] md:text-[15px]"
