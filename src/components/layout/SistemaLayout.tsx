@@ -6,7 +6,8 @@ import {
   Menu,
   PanelLeftClose,
   PanelLeftOpen,
-  UserCog,
+  ShieldUser,
+  UserRoundPlus,
   UsersRound,
   X,
 } from "lucide-react";
@@ -17,6 +18,8 @@ type Props = {
   perfilAtual: string;
   onSair: () => void;
   onPessoas: () => void;
+  onFamilias: () => void;
+  paginaAtual: "pessoas" | "familias";
 };
 
 function Marca({ recolhida = false }: { recolhida?: boolean }) {
@@ -40,11 +43,15 @@ function MenuAdministracao({
   expandido,
   aoAlternar,
   aoSelecionar,
+  aoSelecionarFamilias,
+  paginaAtual,
 }: {
   recolhido: boolean;
   expandido: boolean;
   aoAlternar: () => void;
   aoSelecionar: () => void;
+  aoSelecionarFamilias: () => void;
+  paginaAtual: "pessoas" | "familias";
 }) {
   return (
     <nav aria-label="Menu do sistema" className="flex-1 px-3 py-4">
@@ -55,7 +62,7 @@ function MenuAdministracao({
         aria-expanded={!recolhido && expandido}
         className={`flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-left text-sm font-medium text-white/90 transition-colors hover:bg-white/15 ${recolhido ? "justify-center px-2" : ""}`}
       >
-        <UserCog className="size-4 shrink-0" aria-hidden="true" />
+        <ShieldUser className="size-4 shrink-0" aria-hidden="true" />
         {!recolhido && (
           <>
             <span className="flex-1">Administração</span>
@@ -68,11 +75,20 @@ function MenuAdministracao({
           <button
             type="button"
             onClick={aoSelecionar}
-            aria-current="page"
-            className="flex w-full items-center gap-2.5 rounded-md bg-white/15 px-3 py-2 text-left text-sm font-medium text-white"
+            aria-current={paginaAtual === "pessoas" ? "page" : undefined}
+            className={`flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-left text-sm font-medium text-white ${paginaAtual === "pessoas" ? "bg-white/15" : "hover:bg-white/10"}`}
           >
-            <UsersRound className="size-4" aria-hidden="true" />
+            <UserRoundPlus className="size-4 shrink-0" aria-hidden="true" />
             Pessoas
+          </button>
+          <button
+            type="button"
+            onClick={aoSelecionarFamilias}
+            aria-current={paginaAtual === "familias" ? "page" : undefined}
+            className={`mt-1 flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-left text-sm font-medium text-white ${paginaAtual === "familias" ? "bg-white/15" : "hover:bg-white/10"}`}
+          >
+            <UsersRound className="size-4 shrink-0" aria-hidden="true" />
+            Famílias
           </button>
         </div>
       )}
@@ -80,7 +96,7 @@ function MenuAdministracao({
   );
 }
 
-export default function SistemaLayout({ children, usuarioAtual, perfilAtual, onSair, onPessoas }: Props) {
+export default function SistemaLayout({ children, usuarioAtual, perfilAtual, onSair, onPessoas, onFamilias, paginaAtual }: Props) {
   const [recolhido, setRecolhido] = useState(false);
   const [mobileAberto, setMobileAberto] = useState(false);
   const [administracaoAberta, setAdministracaoAberta] = useState(true);
@@ -101,6 +117,8 @@ export default function SistemaLayout({ children, usuarioAtual, perfilAtual, onS
           expandido={administracaoAberta}
           aoAlternar={() => recolhido ? setRecolhido(false) : setAdministracaoAberta((valor) => !valor)}
           aoSelecionar={onPessoas}
+          aoSelecionarFamilias={onFamilias}
+          paginaAtual={paginaAtual}
         />
         <div className="p-3">
           <button
@@ -128,6 +146,8 @@ export default function SistemaLayout({ children, usuarioAtual, perfilAtual, onS
               expandido={administracaoAberta}
               aoAlternar={() => setAdministracaoAberta((valor) => !valor)}
               aoSelecionar={() => { onPessoas(); setMobileAberto(false); }}
+              aoSelecionarFamilias={() => { onFamilias(); setMobileAberto(false); }}
+              paginaAtual={paginaAtual}
             />
           </aside>
         </div>
@@ -176,7 +196,7 @@ export default function SistemaLayout({ children, usuarioAtual, perfilAtual, onS
                 aria-expanded={perfilAberto}
                 className="flex items-center gap-2 rounded-md px-2 py-1 hover:bg-[#eef5f9]"
               >
-                <span className="flex size-8 items-center justify-center rounded-full bg-[#1495D6] text-xs font-semibold text-white">{iniciais}</span>
+                <span className="flex size-8 items-center justify-center rounded-full bg-[#4697c5] text-xs font-semibold text-white">{iniciais}</span>
                 <span className="hidden max-w-36 text-left sm:block">
                   <span className="block truncate text-sm font-medium">{usuarioAtual}</span>
                   <span className="block text-xs text-[#606b79]">{perfilAtual}</span>

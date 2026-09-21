@@ -32,6 +32,15 @@ export type Pessoa =
       email: string;
       usuario: string;
       perfil: Perfil | "";
+      nomeMae?: string;
+      sexo?: string;
+      estadoCivil?: string;
+      rg?: string;
+      nis?: string;
+      escolaridade?: string;
+      ocupacao?: string;
+      contato2?: string;
+      familiaId?: string;
     })
   | (PessoaBase & {
       tipo: "JURIDICA";
@@ -47,6 +56,9 @@ const perfisApi = {
   Colaborador: "COLABORADOR",
   "Professor/Instrutor": "PROFESSOR_INSTRUTOR",
 } as const;
+const sexoApi: Record<string, string> = { Feminino: "FEMININO", Masculino: "MASCULINO", Outro: "OUTRO", "Prefere não informar": "PREFERE_NAO_INFORMAR" };
+const estadoCivilApi: Record<string, string> = { "Solteiro(a)": "SOLTEIRO_A", "Casado(a)": "CASADO_A", "Divorciado(a)": "DIVORCIADO_A", "Viúvo(a)": "VIUVO_A", "União estável": "UNIAO_ESTAVEL" };
+const escolaridadeApi: Record<string, string> = { "Não alfabetizado(a)": "NAO_ALFABETIZADO_A", "Ensino fundamental": "ENSINO_FUNDAMENTAL", "Ensino médio": "ENSINO_MEDIO", "Ensino superior": "ENSINO_SUPERIOR", "Pós-graduação": "POS_GRADUACAO" };
 
 type PessoaApi = Omit<PessoaBase, "id"> & {
   id: number;
@@ -58,6 +70,15 @@ type PessoaApi = Omit<PessoaBase, "id"> & {
   perfil: string | null;
   razaoSocial: string;
   cnpj: string;
+  nomeMae: string | null;
+  sexo: string | null;
+  estadoCivil: string | null;
+  rg: string | null;
+  nis: string | null;
+  escolaridade: string | null;
+  ocupacao: string | null;
+  contato2: string | null;
+  familiaId: number | null;
 };
 
 export type DadosPessoa = Omit<PessoaBase, "id" | "status" | "dataCriacao" | "dataInativacao"> & {
@@ -70,6 +91,14 @@ export type DadosPessoa = Omit<PessoaBase, "id" | "status" | "dataCriacao" | "da
   senha?: string;
   razaoSocial?: string;
   cnpj?: string;
+  nomeMae?: string;
+  sexo?: string;
+  estadoCivil?: string;
+  rg?: string;
+  nis?: string;
+  escolaridade?: string;
+  ocupacao?: string;
+  contato2?: string;
 };
 
 function converterPessoa(dados: PessoaApi): Pessoa {
@@ -80,6 +109,15 @@ function converterPessoa(dados: PessoaApi): Pessoa {
     tipo: "FISICA",
     usuario: dados.usuario ?? "",
     perfil: perfis.find((perfil) => perfisApi[perfil] === dados.perfil) ?? "",
+    nomeMae: dados.nomeMae ?? "",
+    sexo: Object.entries(sexoApi).find(([, api]) => api === dados.sexo)?.[0] ?? "",
+    estadoCivil: Object.entries(estadoCivilApi).find(([, api]) => api === dados.estadoCivil)?.[0] ?? "",
+    rg: dados.rg ?? "",
+    nis: dados.nis ?? "",
+    escolaridade: Object.entries(escolaridadeApi).find(([, api]) => api === dados.escolaridade)?.[0] ?? "",
+    ocupacao: dados.ocupacao ?? "",
+    contato2: dados.contato2 ?? "",
+    familiaId: dados.familiaId == null ? undefined : String(dados.familiaId),
   };
 }
 
@@ -190,7 +228,7 @@ export async function listarPessoas(signal?: AbortSignal): Promise<Pessoa[]> {
 }
 
 export async function salvarPessoa(dados: DadosPessoa, id?: string): Promise<Pessoa> {
-  const { tipo, perfil, senha, ...campos } = dados;
+  const { tipo, perfil, senha, sexo, estadoCivil, escolaridade, ...campos } = dados;
   const caminho = tipo === "FISICA" ? "/fisicas" : "/juridicas";
   const resposta = await requisitar(`${caminho}${id ? `/${encodeURIComponent(id)}` : ""}`, {
     method: id ? "PUT" : "POST",
@@ -198,6 +236,9 @@ export async function salvarPessoa(dados: DadosPessoa, id?: string): Promise<Pes
       ...campos,
       ...(tipo === "FISICA" ? {
         perfil: perfil ? perfisApi[perfil] : null,
+        ...(sexo !== undefined ? { sexo: sexo ? sexoApi[sexo] : null } : {}),
+        ...(estadoCivil !== undefined ? { estadoCivil: estadoCivil ? estadoCivilApi[estadoCivil] : null } : {}),
+        ...(escolaridade !== undefined ? { escolaridade: escolaridade ? escolaridadeApi[escolaridade] : null } : {}),
         ...(senha ? { senha } : {}),
       } : {}),
     }),

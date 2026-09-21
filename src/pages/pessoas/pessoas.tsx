@@ -20,6 +20,15 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import DadosAssistenciais, { type ErrosContextuais } from "@/components/pessoas/DadosAssistenciais";
+import {
+  dadosContextuaisVazios,
+  inativarAtendimento,
+  salvarAtendimento,
+  salvarFamilia,
+  type DadosContextuais,
+  type Familia,
+} from "@/services/familiaService";
 import {
   apenasNumeros,
   cnpjValido,
@@ -122,6 +131,18 @@ function hojeLocal() {
   return `${ano}-${mes}-${dia}`;
 }
 
+function dataParaExibicao(valor: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(valor)) return "";
+  const [ano, mes, dia] = valor.split("-");
+  return `${dia}/${mes}/${ano}`;
+}
+
+function valorMonetarioValido(valor: string) {
+  if (!valor.trim()) return false;
+  const numero = Number(valor.replace(/[^\d,.-]/g, "").replace(/\.(?=\d{3}(?:\D|$))/g, "").replace(",", "."));
+  return Number.isFinite(numero) && numero >= 0;
+}
+
 function draftDePessoa(pessoa: Pessoa): Draft {
   return {
     ...draftVazio,
@@ -158,6 +179,7 @@ function DateField({ id, label, value, onChange, required, max, error }: {
 }) {
   const dataSelecionada = value ? new Date(`${value}T12:00:00`) : null;
   const [aberto, setAberto] = useState(false);
+  const [texto, setTexto] = useState(() => dataParaExibicao(value));
   const [mesVisivel, setMesVisivel] = useState(() => dataSelecionada ?? new Date());
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -200,7 +222,34 @@ function DateField({ id, label, value, onChange, required, max, error }: {
   function selecionar(dia: number) {
     const data = `${ano}-${String(mes + 1).padStart(2, "0")}-${String(dia).padStart(2, "0")}`;
     onChange(data);
+    setTexto(dataParaExibicao(data));
     setAberto(false);
+  }
+
+  function digitarData(entrada: string) {
+    const numeros = entrada.replace(/\D/g, "").slice(0, 8);
+    const formatada = numeros.length <= 2
+      ? numeros
+      : numeros.length <= 4
+        ? `${numeros.slice(0, 2)}/${numeros.slice(2)}`
+        : `${numeros.slice(0, 2)}/${numeros.slice(2, 4)}/${numeros.slice(4)}`;
+    setTexto(formatada);
+    if (numeros.length !== 8) {
+      onChange("");
+      return;
+    }
+    const dia = Number(numeros.slice(0, 2));
+    const mes = Number(numeros.slice(2, 4));
+    const ano = Number(numeros.slice(4));
+    const data = new Date(ano, mes - 1, dia);
+    const iso = `${ano}-${String(mes).padStart(2, "0")}-${String(dia).padStart(2, "0")}`;
+    const valida = data.getFullYear() === ano && data.getMonth() === mes - 1 && data.getDate() === dia;
+    if (valida && (!max || iso <= max)) {
+      onChange(iso);
+      setMesVisivel(data);
+    } else {
+      onChange("");
+    }
   }
 
   function alterarAno(novoAno: number) {
@@ -210,36 +259,37 @@ function DateField({ id, label, value, onChange, required, max, error }: {
     setMesVisivel(new Date(novoAno, Math.min(mes, ultimoMesPermitido), 1));
   }
 
-  const valorVisivel = dataSelecionada
-    ? new Intl.DateTimeFormat("pt-BR").format(dataSelecionada)
-    : "dd/mm/aaaa";
-
   return (
     <div ref={containerRef} className="relative min-w-0">
       <Label htmlFor={id} className={labelClass}>
         {label}{required && <span aria-label="obrigatório" className="text-red-700"> *</span>}
       </Label>
-      <button
-        id={id}
-        type="button"
-        onClick={() => setAberto((anterior) => !anterior)}
-        aria-expanded={aberto}
-        aria-haspopup="dialog"
-        aria-invalid={Boolean(error)}
-        aria-describedby={error ? `${id}-erro` : undefined}
-        className={`${formInputClass} flex w-full items-center justify-between text-left outline-none focus-visible:border-[#1495D6] focus-visible:ring-2 focus-visible:ring-[#1495D6]/30 aria-invalid:border-red-500 aria-invalid:ring-2 aria-invalid:ring-red-500/20 ${value ? "text-[#273440]" : "text-[#657384]"}`}
-      >
-        <span>{valorVisivel}</span>
-        <CalendarDays className="size-[18px] shrink-0 text-[#657384]" aria-hidden="true" />
-      </button>
+      <div className="relative">
+        <Input
+          id={id}
+          type="text"
+          inputMode="numeric"
+          autoComplete="off"
+          value={texto}
+          onChange={(event) => digitarData(event.target.value)}
+          placeholder="dd/mm/aaaa"
+          maxLength={10}
+          aria-invalid={Boolean(error)}
+          aria-describedby={error ? `${id}-erro` : undefined}
+          className={`${formInputClass} pr-11 ${error ? "border-red-500 focus-visible:border-red-500" : ""}`}
+        />
+        <button type="button" onClick={() => setAberto((anterior) => !anterior)} aria-label="Abrir calendário" aria-expanded={aberto} aria-haspopup="dialog" className="absolute inset-y-0 right-0 flex w-11 items-center justify-center rounded-r-lg text-[#657384] hover:text-[#0d5d86]">
+          <CalendarDays className="size-[18px]" aria-hidden="true" />
+        </button>
+      </div>
       {aberto && (
         <div role="dialog" aria-label="Escolher data de nascimento" className="absolute left-0 top-[calc(100%+8px)] z-30 w-[min(22rem,calc(100vw-2rem))] rounded-xl border border-[#d9e1ea] bg-white p-4 shadow-xl sm:left-auto sm:right-0">
           <div className="mb-4 flex items-center gap-2">
             <button type="button" disabled={chaveMesAtual <= chaveMesMinimo} onClick={() => setMesVisivel(new Date(ano, mes - 1, 1))} aria-label="Mês anterior" className="flex size-9 shrink-0 items-center justify-center rounded-lg text-[#606b79] hover:bg-[#eef5f9] hover:text-[#273440] disabled:cursor-not-allowed disabled:opacity-30"><ChevronLeft className="size-5" /></button>
-            <select aria-label="Mês" value={mes} onChange={(event) => setMesVisivel(new Date(ano, Number(event.target.value), 1))} className="h-9 min-w-0 flex-1 rounded-lg border border-[#d9e1ea] bg-[#FBFDFD] px-2 text-sm font-medium outline-none focus-visible:border-[#1495D6] focus-visible:ring-2 focus-visible:ring-[#1495D6]/30">
+            <select aria-label="Mês" value={mes} onChange={(event) => setMesVisivel(new Date(ano, Number(event.target.value), 1))} className="h-9 min-w-0 flex-1 rounded-lg border border-[#d9e1ea] bg-[#FBFDFD] px-2 text-sm font-medium outline-none focus-visible:border-[#4697c5] focus-visible:ring-2 focus-visible:ring-[#4697c5]/30">
               {nomesMeses.map((nome, indice) => <option key={nome} value={indice} disabled={Boolean(dataMaxima && ano === anoMaximo && indice > dataMaxima.getMonth())}>{nome}</option>)}
             </select>
-            <select aria-label="Ano" value={ano} onChange={(event) => alterarAno(Number(event.target.value))} className="h-9 w-24 shrink-0 rounded-lg border border-[#d9e1ea] bg-[#FBFDFD] px-2 text-sm font-medium outline-none focus-visible:border-[#1495D6] focus-visible:ring-2 focus-visible:ring-[#1495D6]/30">
+            <select aria-label="Ano" value={ano} onChange={(event) => alterarAno(Number(event.target.value))} className="h-9 w-24 shrink-0 rounded-lg border border-[#d9e1ea] bg-[#FBFDFD] px-2 text-sm font-medium outline-none focus-visible:border-[#4697c5] focus-visible:ring-2 focus-visible:ring-[#4697c5]/30">
               {anosDisponiveis.map((anoDisponivel) => <option key={anoDisponivel} value={anoDisponivel}>{anoDisponivel}</option>)}
             </select>
             <button type="button" disabled={chaveMesAtual >= chaveMesMaximo} onClick={() => setMesVisivel(new Date(ano, mes + 1, 1))} aria-label="Próximo mês" className="flex size-9 shrink-0 items-center justify-center rounded-lg text-[#606b79] hover:bg-[#eef5f9] hover:text-[#273440] disabled:cursor-not-allowed disabled:opacity-30"><ChevronRight className="size-5" /></button>
@@ -261,7 +311,7 @@ function DateField({ id, label, value, onChange, required, max, error }: {
                   onClick={() => selecionar(dia)}
                   aria-label={new Intl.DateTimeFormat("pt-BR", { dateStyle: "long" }).format(new Date(`${data}T12:00:00`))}
                   aria-pressed={selecionado}
-                  className={`flex size-9 items-center justify-center rounded-lg text-[15px] transition-colors disabled:cursor-not-allowed disabled:opacity-30 ${selecionado ? "bg-[#1495D6] font-semibold text-white" : "text-[#273440] hover:bg-[#eaf7ff] hover:text-[#0d5d86]"}`}
+                  className={`flex size-9 items-center justify-center rounded-lg text-[15px] transition-colors disabled:cursor-not-allowed disabled:opacity-30 ${selecionado ? "bg-[#4697c5] font-semibold text-white" : "text-[#273440] hover:bg-[#eaf7ff] hover:text-[#0d5d86]"}`}
                 >
                   {dia}
                 </button>
@@ -370,7 +420,7 @@ function PasswordField({ id, label, value, onChange, required, error, hint, plac
           placeholder={placeholder}
           className={`${formInputClass} pr-11 ${error ? "border-red-500" : ""}`}
         />
-        <button type="button" onClick={() => setVisivel((anterior) => !anterior)} aria-label={`${visivel ? "Ocultar" : "Mostrar"} ${id === "senha" ? "senha" : "confirmação de senha"}`} className="absolute inset-y-0 right-0 flex w-10 items-center justify-center rounded-r-lg text-[#606b79] hover:text-[#0d5d86] focus-visible:outline-2 focus-visible:outline-[#1495D6]">
+        <button type="button" onClick={() => setVisivel((anterior) => !anterior)} aria-label={`${visivel ? "Ocultar" : "Mostrar"} ${id === "senha" ? "senha" : "confirmação de senha"}`} className="absolute inset-y-0 right-0 flex w-10 items-center justify-center rounded-r-lg text-[#606b79] hover:text-[#0d5d86] focus-visible:outline-2 focus-visible:outline-[#4697c5]">
           {visivel ? <EyeOff size={18} /> : <Eye size={18} />}
         </button>
       </div>
@@ -383,9 +433,15 @@ function PasswordField({ id, label, value, onChange, required, error, hint, plac
 export default function PessoasPage({
   usuarioAtual,
   podeGerenciarAcesso,
+  contextoInicial = "PESSOA",
+  familiaEmEdicao,
+  onConcluirContexto,
 }: {
   usuarioAtual: string;
   podeGerenciarAcesso: boolean;
+  contextoInicial?: "PESSOA" | "FAMILIA" | "IDOSA";
+  familiaEmEdicao?: Familia;
+  onConcluirContexto?: () => void;
 }) {
   const [pessoas, setPessoas] = useState<Pessoa[]>([]);
   const [carregando, setCarregando] = useState(true);
@@ -419,10 +475,44 @@ export default function PessoasPage({
   const [busca, setBusca] = useState("");
   const [ordemAscendente, setOrdemAscendente] = useState(true);
   const [editando, setEditando] = useState<Pessoa | null>(null);
-  const [formularioAberto, setFormularioAberto] = useState(false);
-  const [draft, setDraft] = useState<Draft>(draftVazio);
+  const [formularioAberto, setFormularioAberto] = useState(contextoInicial !== "PESSOA" || Boolean(familiaEmEdicao));
+  const [contexto, setContexto] = useState<"PESSOA" | "FAMILIA" | "IDOSA">(familiaEmEdicao?.contexto ?? contextoInicial);
+  const [dadosContextuais, setDadosContextuais] = useState<DadosContextuais>(() => familiaEmEdicao ? {
+    nomeMae: familiaEmEdicao.nomeMae,
+    sexo: familiaEmEdicao.sexo,
+    estadoCivil: familiaEmEdicao.estadoCivil,
+    rg: familiaEmEdicao.rg,
+    nis: familiaEmEdicao.nis,
+    residencia: familiaEmEdicao.residencia,
+    valorAluguel: familiaEmEdicao.valorAluguel,
+    escolaridade: familiaEmEdicao.escolaridade,
+    ocupacao: familiaEmEdicao.ocupacao,
+    contato2: familiaEmEdicao.contato2,
+    rendas: familiaEmEdicao.rendas,
+    membros: familiaEmEdicao.membros,
+    relatos: familiaEmEdicao.relatos,
+    vinculos: familiaEmEdicao.vinculos,
+    questionario: familiaEmEdicao.questionario,
+    encaminhamentos: familiaEmEdicao.encaminhamentos,
+  } : dadosContextuaisVazios());
+  const [draft, setDraft] = useState<Draft>(() => familiaEmEdicao ? {
+    ...draftVazio,
+    tipo: "FISICA",
+    nome: familiaEmEdicao.nome,
+    cpf: formatarCpf(familiaEmEdicao.cpf),
+    dataNascimento: familiaEmEdicao.dataNascimento,
+    email: familiaEmEdicao.email,
+    telefone: formatarTelefone(familiaEmEdicao.telefone),
+    cep: formatarCep(familiaEmEdicao.cep),
+    logradouro: familiaEmEdicao.logradouro,
+    numero: familiaEmEdicao.numero,
+    bairro: familiaEmEdicao.bairro,
+    cidade: familiaEmEdicao.cidade,
+    estado: familiaEmEdicao.estado,
+  } : draftVazio);
   const [erro, setErro] = useState("");
   const [errosCampos, setErrosCampos] = useState<ErrosCampos>({});
+  const [errosContextuais, setErrosContextuais] = useState<ErrosContextuais>({});
   const [aviso, setAviso] = useState("");
 
   const pessoasFiltradas = useMemo(() => {
@@ -469,13 +559,17 @@ export default function PessoasPage({
     }));
     setErro("");
     setErrosCampos({});
+    setErrosContextuais({});
   }
 
   function abrirCadastro() {
     setEditando(null);
     setDraft({ ...draftVazio });
+    setContexto("PESSOA");
+    setDadosContextuais(dadosContextuaisVazios());
     setErro("");
     setErrosCampos({});
+    setErrosContextuais({});
     setAviso("");
     setFormularioAberto(true);
     window.scrollTo(0, 0);
@@ -486,12 +580,17 @@ export default function PessoasPage({
     setDraft(draftDePessoa(pessoa));
     setErro("");
     setErrosCampos({});
+    setErrosContextuais({});
     setAviso("");
     setFormularioAberto(true);
     window.scrollTo(0, 0);
   }
 
   function voltar() {
+    if (contexto !== "PESSOA" && onConcluirContexto) {
+      onConcluirContexto();
+      return;
+    }
     setFormularioAberto(false);
     setEditando(null);
     setErro("");
@@ -505,7 +604,7 @@ export default function PessoasPage({
       if (!draft.nome.trim()) falhas.nome = "Informe o nome completo.";
       if (!cpfValido(draft.cpf)) falhas.cpf = "Informe um CPF válido.";
       else if (pessoas.some((pessoa) =>
-        pessoa.id !== editando?.id && pessoa.tipo === "FISICA" &&
+        pessoa.id !== (editando?.id ?? familiaEmEdicao?.responsavelId) && pessoa.tipo === "FISICA" &&
         pessoa.cpf === apenasNumeros(draft.cpf))) {
         falhas.cpf = "Este CPF já está cadastrado.";
       }
@@ -562,14 +661,30 @@ export default function PessoasPage({
     return falhas;
   }
 
+  function validarContextuais(): ErrosContextuais {
+    if (contexto === "PESSOA") return {};
+    const falhas: ErrosContextuais = {};
+    if (!dadosContextuais.nomeMae.trim()) falhas.nomeMae = "Informe o nome da mãe.";
+    if (!dadosContextuais.rg.trim()) falhas.rg = "Informe o RG.";
+    if (!dadosContextuais.residencia) falhas.residencia = "Selecione o tipo de residência.";
+    if (dadosContextuais.residencia === "Alugada" && !valorMonetarioValido(dadosContextuais.valorAluguel)) falhas.valorAluguel = "Informe um valor de aluguel válido.";
+    if (!dadosContextuais.rendas.some((renda) => renda.ativa)) falhas.rendas = "Informe pelo menos uma fonte de renda familiar.";
+    else if (dadosContextuais.rendas.some((renda) => renda.ativa && !valorMonetarioValido(renda.valor))) falhas.rendas = "Informe um valor válido para cada fonte de renda selecionada.";
+    if (dadosContextuais.membros.some((membro) => !membro.pessoaId || !membro.vinculo)) falhas.membros = "Selecione a pessoa e o vínculo de todos os integrantes.";
+    if (contexto === "IDOSA" && dadosContextuais.questionario.some((item) => !item.resposta)) falhas.questionario = "Responda às 12 perguntas do questionário.";
+    return falhas;
+  }
+
   async function salvar(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (operacaoEmCurso.current) return;
     const falhas = validar();
-    if (Object.keys(falhas).length > 0) {
+    const falhasContextuais = validarContextuais();
+    if (Object.keys(falhas).length > 0 || Object.keys(falhasContextuais).length > 0) {
       setErrosCampos(falhas);
+      setErrosContextuais(falhasContextuais);
       setErro("Revise os campos indicados abaixo.");
-      const primeiroCampo = Object.keys(falhas)[0];
+      const primeiroCampo = Object.keys(falhas)[0] ?? Object.keys(falhasContextuais)[0];
       if (primeiroCampo) {
         requestAnimationFrame(() => document.getElementById(primeiroCampo)?.focus());
       }
@@ -585,6 +700,9 @@ export default function PessoasPage({
       cidade: draft.cidade.trim(),
       estado: draft.estado.trim().toUpperCase(),
     };
+    const responsavelExistente = familiaEmEdicao
+      ? pessoas.find((pessoa) => pessoa.id === familiaEmEdicao.responsavelId && pessoa.tipo === "FISICA")
+      : undefined;
     const dados: DadosPessoa = draft.tipo === "FISICA"
       ? {
           ...base,
@@ -593,9 +711,33 @@ export default function PessoasPage({
           cpf: apenasNumeros(draft.cpf),
           dataNascimento: draft.dataNascimento,
           email: draft.email.trim(),
-          usuario: draft.concederAcesso ? draft.usuario.trim() : "",
-          perfil: draft.concederAcesso ? draft.perfil : "",
+          usuario: contexto !== "PESSOA" && responsavelExistente?.tipo === "FISICA"
+            ? responsavelExistente.usuario
+            : draft.concederAcesso ? draft.usuario.trim() : "",
+          perfil: contexto !== "PESSOA" && responsavelExistente?.tipo === "FISICA"
+            ? responsavelExistente.perfil
+            : draft.concederAcesso ? draft.perfil : "",
           senha: draft.concederAcesso ? draft.senha : undefined,
+          ...(contexto === "PESSOA" && editando?.tipo === "FISICA" ? {
+            nomeMae: editando.nomeMae,
+            sexo: editando.sexo,
+            estadoCivil: editando.estadoCivil,
+            rg: editando.rg,
+            nis: editando.nis,
+            escolaridade: editando.escolaridade,
+            ocupacao: editando.ocupacao,
+            contato2: editando.contato2,
+          } : {}),
+          ...(contexto !== "PESSOA" ? {
+            nomeMae: dadosContextuais.nomeMae.trim(),
+            sexo: dadosContextuais.sexo,
+            estadoCivil: dadosContextuais.estadoCivil,
+            rg: dadosContextuais.rg.trim(),
+            nis: dadosContextuais.nis.trim(),
+            escolaridade: dadosContextuais.escolaridade,
+            ocupacao: dadosContextuais.ocupacao.trim(),
+            contato2: apenasNumeros(dadosContextuais.contato2),
+          } : {}),
         }
       : {
           ...base,
@@ -608,6 +750,18 @@ export default function PessoasPage({
     setSalvando(true);
     setErro("");
     try {
+      if (contexto !== "PESSOA") {
+        const pessoa = await salvarPessoa(dados, familiaEmEdicao?.responsavelId);
+        await salvarFamilia({ ...dadosContextuais, responsavelId: pessoa.id }, familiaEmEdicao?.id);
+        if (contexto === "IDOSA") {
+          await salvarAtendimento({ ...dadosContextuais, fisicaId: pessoa.id }, familiaEmEdicao?.atendimentoId);
+        } else if (familiaEmEdicao?.atendimentoId) {
+          await inativarAtendimento(familiaEmEdicao.atendimentoId);
+        }
+        if (onConcluirContexto) onConcluirContexto();
+        else voltar();
+        return;
+      }
       const pessoa = await salvarPessoa(dados, editando?.id);
       setPessoas((anteriores) => editando
         ? anteriores.map((item) => item.id === pessoa.id ? pessoa : item)
@@ -665,7 +819,7 @@ export default function PessoasPage({
       <div className={`mb-3 flex items-center gap-2 overflow-x-auto whitespace-nowrap text-[#606b79] ${formularioAberto ? "text-[15px]" : "text-xs"}`}>
         <span>Sistema</span><ChevronRight size={13} /><span>Administração</span>
         <ChevronRight size={13} /><span className="text-[#273440]">Pessoas</span>
-        {formularioAberto && <><ChevronRight size={13} /><span>{editando ? "Editar" : "Nova pessoa"}</span></>}
+        {formularioAberto && <><ChevronRight size={13} /><span>{editando || familiaEmEdicao ? "Editar" : "Novo cadastro"}</span></>}
       </div>
 
       {aviso && (
@@ -682,7 +836,7 @@ export default function PessoasPage({
               <h1 className="text-[28px] font-bold tracking-tight">Gerenciamento de pessoas</h1>
               <p className="mt-1 text-sm text-[#606b79]">Cadastre e acompanhe pessoas físicas e jurídicas em um só lugar.</p>
             </div>
-            <Button type="button" disabled={carregando || Boolean(erroListagem) || inativando !== null} onClick={abrirCadastro} className="h-10 gap-2 bg-[#1495D6] px-4 text-white hover:bg-[#117eb5]">
+            <Button type="button" disabled={carregando || Boolean(erroListagem) || inativando !== null} onClick={abrirCadastro} className="h-10 gap-2 bg-[#4697c5] px-4 text-white hover:bg-[#67a0c0]">
               <Plus size={17} /> Nova pessoa
             </Button>
           </div>
@@ -720,10 +874,10 @@ export default function PessoasPage({
               </div>
             ) : pessoasFiltradas.length === 0 ? (
               <div className="flex flex-col items-center py-16 text-center">
-                <span className="flex size-14 items-center justify-center rounded-2xl bg-[#eaf7ff] text-[#1495D6]"><UsersRound size={27} /></span>
+                <span className="flex size-14 items-center justify-center rounded-2xl bg-[#eaf7ff] text-[#4697c5]"><UsersRound size={27} /></span>
                 <h3 className="mt-4 font-semibold">{busca ? "Nenhuma pessoa encontrada" : "Nenhuma pessoa cadastrada"}</h3>
                 <p className="mt-1 max-w-sm text-sm text-[#606b79]">{busca ? "Tente outro nome ou documento." : "Comece cadastrando a primeira pessoa física ou jurídica."}</p>
-                {!busca && <Button type="button" disabled={carregando || Boolean(erroListagem) || inativando !== null} onClick={abrirCadastro} className="mt-5 bg-[#1495D6] text-white hover:bg-[#117eb5]"><Plus size={16} /> Nova pessoa</Button>}
+                {!busca && <Button type="button" disabled={carregando || Boolean(erroListagem) || inativando !== null} onClick={abrirCadastro} className="mt-5 bg-[#4697c5] text-white hover:bg-[#67a0c0]"><Plus size={16} /> Nova pessoa</Button>}
               </div>
             ) : (
               <>
@@ -731,7 +885,7 @@ export default function PessoasPage({
                 {pessoasFiltradas.map((pessoa) => (
                   <div key={pessoa.id} className="rounded-xl border border-[#e5eaf0] p-4">
                     <div className="flex items-start justify-between gap-3">
-                      <button type="button" disabled={inativando !== null} onClick={() => abrirEdicao(pessoa)} className="text-left font-semibold hover:text-[#1495D6]">{nomePessoa(pessoa)}</button>
+                      <button type="button" disabled={inativando !== null} onClick={() => abrirEdicao(pessoa)} className="text-left font-semibold hover:text-[#4697c5]">{nomePessoa(pessoa)}</button>
                       <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${pessoa.status ? "bg-[#e6f7ee] text-[#19704b]" : "bg-[#f1f3f5] text-[#606b79]"}`}>{pessoa.status ? "Ativa" : "Inativa"}</span>
                     </div>
                     <p className="mt-1 text-sm text-[#606b79]">Pessoa {pessoa.tipo === "FISICA" ? "física" : "jurídica"} · {documentoFormatado(pessoa)}</p>
@@ -749,7 +903,7 @@ export default function PessoasPage({
                   <thead className="border-b border-[#e5eaf0] text-[#606b79]">
                     <tr>
                       <th scope="col" aria-sort={ordemAscendente ? "ascending" : "descending"} className="pb-3 font-medium">
-                        <button type="button" onClick={() => setOrdemAscendente((valor) => !valor)} className="flex items-center gap-1.5 hover:text-[#1495D6]">
+                        <button type="button" onClick={() => setOrdemAscendente((valor) => !valor)} className="flex items-center gap-1.5 hover:text-[#4697c5]">
                           Nome <ArrowUpDown size={15} />
                         </button>
                       </th>
@@ -764,7 +918,7 @@ export default function PessoasPage({
                     {pessoasFiltradas.map((pessoa) => (
                       <tr key={pessoa.id} className="border-b border-[#edf0f3] last:border-0">
                         <td className="py-4 pr-4 font-medium">
-                          <button type="button" disabled={inativando !== null} onClick={() => abrirEdicao(pessoa)} className="text-left hover:text-[#1495D6]">{nomePessoa(pessoa)}</button>
+                          <button type="button" disabled={inativando !== null} onClick={() => abrirEdicao(pessoa)} className="text-left hover:text-[#4697c5]">{nomePessoa(pessoa)}</button>
                         </td>
                         <td className="py-4 pr-4 text-[#606b79]">{pessoa.tipo === "FISICA" ? "Física" : "Jurídica"}</td>
                         <td className="py-4 pr-4 text-[#606b79]">{documentoFormatado(pessoa)}</td>
@@ -772,7 +926,7 @@ export default function PessoasPage({
                         <td className="py-4 pr-4"><span className={`rounded-full px-2.5 py-1 text-xs font-medium ${pessoa.status ? "bg-[#e6f7ee] text-[#19704b]" : "bg-[#f1f3f5] text-[#606b79]"}`}>{pessoa.status ? "Ativa" : "Inativa"}</span></td>
                         <td className="py-4 text-right">
                           <div className="flex justify-end gap-2">
-                            <button type="button" disabled={inativando !== null} onClick={() => abrirEdicao(pessoa)} className="rounded-lg p-2 text-[#606b79] hover:bg-[#eaf7ff] hover:text-[#1495D6]" aria-label={`Editar ${nomePessoa(pessoa)}`}><Pencil size={16} /></button>
+                            <button type="button" disabled={inativando !== null} onClick={() => abrirEdicao(pessoa)} className="rounded-lg p-2 text-[#606b79] hover:bg-[#eaf7ff] hover:text-[#4697c5]" aria-label={`Editar ${nomePessoa(pessoa)}`}><Pencil size={16} /></button>
                             <button type="button" disabled={inativando !== null} onClick={() => inativar(pessoa)} className="rounded-lg px-2 py-1 text-xs font-medium text-[#0d5d86] hover:bg-[#eaf7ff]">{inativando === pessoa.id ? "Inativando..." : "Inativar"}</button>
                           </div>
                         </td>
@@ -788,13 +942,34 @@ export default function PessoasPage({
       ) : (
         <div className="w-full">
           <div className="mb-8">
-            <h1 className="text-[30px] font-bold tracking-tight">{editando ? "Editar pessoa" : "Nova pessoa"}</h1>
-            <p className="mt-1 text-base leading-6 text-[#606b79]">{editando ? "Atualize os dados da pessoa no Centro Social." : "Cadastre uma nova pessoa no Centro Social."}</p>
+            <h1 className="text-[30px] font-bold tracking-tight">{editando || familiaEmEdicao ? "Editar cadastro" : "Novo cadastro"}</h1>
+            <p className="mt-1 text-base leading-6 text-[#606b79]">{editando || familiaEmEdicao ? "Atualize os dados cadastrais no Centro Social." : "Preencha os dados do cadastro no Centro Social."}</p>
           </div>
           <form onSubmit={salvar} noValidate aria-busy={salvando}>
             <fieldset disabled={salvando} className="space-y-8">
             {erro && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-base text-red-700">{erro}</div>}
-            <fieldset>
+            <section className="rounded-xl border border-[#4697c5]/25 bg-[#4697c5]/[.045] p-5 sm:p-6">
+              <Label htmlFor="contextoCadastro" className={labelClass}>Tipo de cadastro</Label>
+              <select
+                id="contextoCadastro"
+                value={contexto}
+                onChange={(event) => {
+                  const novoContexto = event.target.value as "PESSOA" | "FAMILIA" | "IDOSA";
+                  setContexto(novoContexto);
+                  if (novoContexto !== "PESSOA") setDraft((anterior) => ({ ...anterior, tipo: "FISICA", concederAcesso: false }));
+                  setErro("");
+                  setErrosCampos({});
+                  setErrosContextuais({});
+                }}
+                className="h-11 w-full max-w-xl rounded-lg border border-[#d5dbe2] bg-[#FBFDFD] px-4 text-base shadow-sm outline-none focus-visible:border-[#4697c5] focus-visible:ring-2 focus-visible:ring-[#4697c5]/30"
+              >
+                <option value="PESSOA">Pessoa</option>
+                <option value="FAMILIA">Família</option>
+                <option value="IDOSA">Idosa</option>
+              </select>
+              <p className="mt-2 text-sm text-[#606b79]">O tipo de cadastro define os campos exibidos abaixo.</p>
+            </section>
+            {contexto === "PESSOA" && <fieldset>
               <legend className="sr-only">Tipo de pessoa</legend>
               <div className="grid gap-3 sm:grid-cols-2">
                 {(["FISICA", "JURIDICA"] as const).map((tipo) => {
@@ -811,22 +986,22 @@ export default function PessoasPage({
                         onChange={() => alterarTipo(tipo)}
                         className="peer sr-only"
                       />
-                      <span className={`relative flex min-h-[104px] items-center gap-4 rounded-xl border p-5 text-left transition-colors peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-[#1495D6] ${selecionado ? "border-[#1495D6] bg-[#1495D6]/[.045] ring-1 ring-[#1495D6]/20" : "border-[#d9e1ea] bg-white hover:border-[#1495D6]/50"} ${editando ? "opacity-80" : ""}`}>
-                        <span className={`flex size-10 shrink-0 items-center justify-center rounded-full ${selecionado ? "bg-[#1495D6] text-white" : "bg-[#edf1f4] text-[#748393]"}`}>
+                      <span className={`relative flex min-h-[104px] items-center gap-4 rounded-xl border p-5 text-left transition-colors peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-[#4697c5] ${selecionado ? "border-[#4697c5] bg-[#4697c5]/[.045] ring-1 ring-[#4697c5]/20" : "border-[#d9e1ea] bg-white hover:border-[#4697c5]/50"} ${editando ? "opacity-80" : ""}`}>
+                        <span className={`flex size-10 shrink-0 items-center justify-center rounded-full ${selecionado ? "bg-[#4697c5] text-white" : "bg-[#edf1f4] text-[#748393]"}`}>
                           <Icone className="size-[18px]" aria-hidden="true" />
                         </span>
                         <span>
                           <strong className="block text-base font-semibold">Pessoa {tipo === "FISICA" ? "Física" : "Jurídica"}</strong>
                           <small className="mt-1 block text-sm leading-5 text-[#606b79]">Cadastro de {tipo === "FISICA" ? "uma pessoa" : "uma organização"}</small>
                         </span>
-                        {selecionado && <Check className="absolute right-4 top-4 size-4 text-[#1495D6]" aria-hidden="true" />}
+                        {selecionado && <Check className="absolute right-4 top-4 size-4 text-[#4697c5]" aria-hidden="true" />}
                       </span>
                     </label>
                   );
                 })}
               </div>
               {editando && <p className={`${helperTextClass} text-[#606b79]`}>O tipo de pessoa não pode ser alterado após o cadastro.</p>}
-            </fieldset>
+            </fieldset>}
 
             <section className="border-t border-[#d9e1ea] pt-7">
               <div className="mb-5">
@@ -850,8 +1025,8 @@ export default function PessoasPage({
               )}
             </section>
 
-            {draft.tipo === "FISICA" && podeGerenciarAcesso && (
-              <section className="rounded-xl border border-[#1495D6]/25 bg-[#1495D6]/[.045] p-5 [&_input]:bg-[#F2F7FB] sm:p-6">
+            {contexto === "PESSOA" && draft.tipo === "FISICA" && podeGerenciarAcesso && (
+              <section className="rounded-xl border border-[#4697c5]/25 bg-[#4697c5]/[.045] p-5 [&_input]:bg-[#F2F7FB] sm:p-6">
                 <div className="flex items-start justify-between gap-4">
                   <div>
                     <h2 className="text-lg font-semibold">Acesso ao sistema</h2>
@@ -872,12 +1047,12 @@ export default function PessoasPage({
                       aria-describedby={errosCampos.concederAcesso ? "acesso-ajuda acesso-erro" : "acesso-ajuda"}
                       className="peer sr-only"
                     />
-                    <span aria-hidden="true" className="relative h-6 w-11 rounded-full bg-[#d9e1ea] transition-colors peer-checked:bg-[#1495D6] peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-[#1495D6] after:absolute after:left-0.5 after:top-0.5 after:size-5 after:rounded-full after:bg-white after:shadow-sm after:transition-transform peer-checked:after:translate-x-5" />
+                    <span aria-hidden="true" className="relative h-6 w-11 rounded-full bg-[#d9e1ea] transition-colors peer-checked:bg-[#4697c5] peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-[#4697c5] after:absolute after:left-0.5 after:top-0.5 after:size-5 after:rounded-full after:bg-white after:shadow-sm after:transition-transform peer-checked:after:translate-x-5" />
                   </label>
                 </div>
                 {errosCampos.concederAcesso && <FieldMessage id="acesso-erro" tone="error">{errosCampos.concederAcesso}</FieldMessage>}
                 {draft.concederAcesso ? (
-                  <div className="mt-6 grid gap-5 border-t border-[#1495D6]/20 pt-5 sm:grid-cols-2">
+                  <div className="mt-6 grid gap-5 border-t border-[#4697c5]/20 pt-5 sm:grid-cols-2">
                         {campo("usuario", "Usuário", { required: true, placeholder: "Digite o usuário de acesso" })}
                         <div className="min-w-0">
                           <Label htmlFor="perfil" className={labelClass}>Acesso <span aria-label="obrigatório" className="text-red-700">*</span></Label>
@@ -888,7 +1063,7 @@ export default function PessoasPage({
                             required
                             aria-invalid={Boolean(errosCampos.perfil)}
                             aria-describedby={errosCampos.perfil ? "perfil-erro" : undefined}
-                            className={`h-11 w-full rounded-lg border bg-[#F2F7FB] px-4 text-base shadow-sm outline-none focus-visible:border-[#1495D6] focus-visible:ring-2 focus-visible:ring-[#1495D6]/30 ${errosCampos.perfil ? "border-red-500" : "border-[#d5dbe2]"}`}
+                            className={`h-11 w-full rounded-lg border bg-[#F2F7FB] px-4 text-base shadow-sm outline-none focus-visible:border-[#4697c5] focus-visible:ring-2 focus-visible:ring-[#4697c5]/30 ${errosCampos.perfil ? "border-red-500" : "border-[#d5dbe2]"}`}
                           >
                             <option value="">Selecione o nível de acesso</option>
                             {perfis.map((perfil) => <option key={perfil} value={perfil}>{perfil}</option>)}
@@ -898,10 +1073,10 @@ export default function PessoasPage({
                         <PasswordField id="senha" label={editando ? "Nova senha" : "Senha"} value={draft.senha} onChange={(valor) => atualizar("senha", valor)} required={!editando || Boolean(draft.confirmarSenha)} error={errosCampos.senha} hint={editando ? "Deixe em branco se não quiser informar outra senha." : undefined} placeholder={editando ? "Opcional" : "Mínimo de 8 caracteres"} />
                         <PasswordField id="confirmarSenha" label="Confirmar senha" value={draft.confirmarSenha} onChange={(valor) => atualizar("confirmarSenha", valor)} required={!editando || Boolean(draft.senha)} error={errosCampos.confirmarSenha} placeholder="Repita a senha" />
                   </div>
-                ) : <p className="mt-5 border-t border-[#1495D6]/20 pt-4 text-base leading-6 text-[#606b79]">Esta pessoa não terá acesso ao sistema.</p>}
+                ) : <p className="mt-5 border-t border-[#4697c5]/20 pt-4 text-base leading-6 text-[#606b79]">Esta pessoa não terá acesso ao sistema.</p>}
               </section>
             )}
-            {draft.tipo === "FISICA" && !podeGerenciarAcesso && (
+            {contexto === "PESSOA" && draft.tipo === "FISICA" && !podeGerenciarAcesso && (
               <p className="border-t border-[#d9e1ea] pt-5 text-base leading-6 text-[#606b79]">Somente administradores podem conceder ou alterar o acesso ao sistema.</p>
             )}
 
@@ -920,9 +1095,11 @@ export default function PessoasPage({
               </div>
             </section>
 
+            {contexto !== "PESSOA" && <DadosAssistenciais contexto={contexto} dados={dadosContextuais} dataNascimento={draft.dataNascimento} onChange={(dados) => { setDadosContextuais(dados); setErrosContextuais({}); }} errors={errosContextuais} pessoasDisponiveis={pessoas.filter((pessoa) => pessoa.tipo === "FISICA" && pessoa.id !== familiaEmEdicao?.responsavelId && (!pessoa.familiaId || dadosContextuais.membros.some((membro) => membro.pessoaId === pessoa.id)))} />}
+
             <div className="flex justify-end gap-3 border-t border-[#d9e1ea] pb-8 pt-6">
               <Button type="button" variant="ghost" onClick={voltar} className="h-10 px-4 text-base">Cancelar</Button>
-              <Button type="submit" className="h-10 bg-[#1495D6] px-5 text-base text-white hover:bg-[#117eb5]">{salvando ? "Salvando..." : editando ? "Salvar alterações" : "Salvar pessoa"}</Button>
+              <Button type="submit" className="h-10 bg-[#4697c5] px-5 text-base text-white hover:bg-[#67a0c0]">{salvando ? "Salvando..." : editando || familiaEmEdicao ? "Salvar alterações" : "Salvar cadastro"}</Button>
             </div>
             </fieldset>
           </form>
