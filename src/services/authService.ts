@@ -46,9 +46,12 @@ export async function login(
   }
 
   if (!response.ok) {
-    throw new Error(response.status === 401
-      ? "Usuário ou senha inválidos."
-      : "Não foi possível entrar no sistema. Tente novamente.");
+    if (response.status === 401) throw new Error("Usuário ou senha inválidos.");
+    const erro: unknown = await response.json().catch(() => null);
+    const mensagem = erro && typeof erro === "object" && "message" in erro && typeof erro.message === "string"
+      ? erro.message
+      : "Não foi possível entrar no sistema. Tente novamente.";
+    throw new Error(mensagem);
   }
 
   return response.json();

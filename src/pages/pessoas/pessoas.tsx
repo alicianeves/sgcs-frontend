@@ -20,30 +20,29 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import DadosAssistenciais, { type ErrosContextuais } from "@/components/pessoas/DadosAssistenciais";
+import DadosAssistenciais, { CamposIdentificacaoComplementar, type ErrosContextuais } from "@/components/pessoas/DadosAssistenciais";
 import {
   dadosContextuaisVazios,
-  inativarAtendimento,
-  salvarAtendimento,
-  salvarFamilia,
+  salvarCadastroContextual,
   type DadosContextuais,
-  type Familia,
 } from "@/services/familiaService";
 import {
   apenasNumeros,
   cnpjValido,
   cpfValido,
   documentoFormatado,
-  documentoPessoa,
   formatarCep,
   formatarCnpj,
   formatarCpf,
   formatarTelefone,
+  buscarPessoa,
   listarPessoas,
   nomePessoa,
   perfis,
   salvarPessoa,
   inativarPessoa,
+  reativarPessoa,
+  removerAcessoPessoa,
   type DadosPessoa,
   type Perfil,
   type Pessoa,
@@ -55,6 +54,7 @@ type Draft = {
   nome: string;
   cpf: string;
   dataNascimento: string;
+  idade: string;
   email: string;
   razaoSocial: string;
   cnpj: string;
@@ -80,6 +80,7 @@ const draftVazio: Draft = {
   nome: "",
   cpf: "",
   dataNascimento: "",
+  idade: "",
   email: "",
   razaoSocial: "",
   cnpj: "",
@@ -109,6 +110,15 @@ const nomesMeses = [
   "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
 ];
 const diasSemana = ["D", "S", "T", "Q", "Q", "S", "S"];
+const estadosBrasileiros = [
+  ["AC", "Acre"], ["AL", "Alagoas"], ["AP", "Amapá"], ["AM", "Amazonas"],
+  ["BA", "Bahia"], ["CE", "Ceará"], ["DF", "Distrito Federal"], ["ES", "Espírito Santo"],
+  ["GO", "Goiás"], ["MA", "Maranhão"], ["MT", "Mato Grosso"], ["MS", "Mato Grosso do Sul"],
+  ["MG", "Minas Gerais"], ["PA", "Pará"], ["PB", "Paraíba"], ["PR", "Paraná"],
+  ["PE", "Pernambuco"], ["PI", "Piauí"], ["RJ", "Rio de Janeiro"], ["RN", "Rio Grande do Norte"],
+  ["RS", "Rio Grande do Sul"], ["RO", "Rondônia"], ["RR", "Roraima"], ["SC", "Santa Catarina"],
+  ["SP", "São Paulo"], ["SE", "Sergipe"], ["TO", "Tocantins"],
+] as const;
 
 function FieldMessage({ id, children, tone = "muted" }: {
   id: string;
@@ -159,6 +169,7 @@ function draftDePessoa(pessoa: Pessoa): Draft {
           nome: pessoa.nome,
           cpf: formatarCpf(pessoa.cpf),
           dataNascimento: pessoa.dataNascimento,
+          idade: pessoa.dataNascimento ? "" : pessoa.idade == null ? "" : String(pessoa.idade),
           email: pessoa.email,
           usuario: pessoa.usuario,
           perfil: pessoa.perfil,
@@ -433,27 +444,27 @@ function PasswordField({ id, label, value, onChange, required, error, hint, plac
 export default function PessoasPage({
   usuarioAtual,
   podeGerenciarAcesso,
-  contextoInicial = "PESSOA",
-  familiaEmEdicao,
-  onConcluirContexto,
 }: {
   usuarioAtual: string;
   podeGerenciarAcesso: boolean;
-  contextoInicial?: "PESSOA" | "FAMILIA" | "IDOSA";
-  familiaEmEdicao?: Familia;
-  onConcluirContexto?: () => void;
 }) {
   const [pessoas, setPessoas] = useState<Pessoa[]>([]);
+  const [pessoasDisponiveis, setPessoasDisponiveis] = useState<Pessoa[]>([]);
+  const [busca, setBusca] = useState("");
+  const [statusFiltro, setStatusFiltro] = useState(true);
   const [carregando, setCarregando] = useState(true);
   const [erroListagem, setErroListagem] = useState("");
+  const [erroPessoasDisponiveis, setErroPessoasDisponiveis] = useState("");
   const [tentativa, setTentativa] = useState(0);
   const [salvando, setSalvando] = useState(false);
-  const [inativando, setInativando] = useState<string | null>(null);
+  const [alterandoStatus, setAlterandoStatus] = useState<string | null>(null);
+  const [consultando, setConsultando] = useState<string | null>(null);
+  const [confirmacao, setConfirmacao] = useState<{ pessoa: Pessoa; acao: "inativar" | "reativar" } | null>(null);
   const operacaoEmCurso = useRef(false);
 
   useEffect(() => {
     const controller = new AbortController();
-    listarPessoas(controller.signal)
+    const atraso = window.setTimeout(() => listarPessoas(controller.signal, { busca, status: statusFiltro })
       .then((dados) => {
         if (!controller.signal.aborted) setPessoas(dados);
       })
@@ -462,6 +473,18 @@ export default function PessoasPage({
       })
       .finally(() => {
         if (!controller.signal.aborted) setCarregando(false);
+      }), 250);
+    return () => { window.clearTimeout(atraso); controller.abort(); };
+  }, [tentativa, busca, statusFiltro]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    listarPessoas(controller.signal, { status: true })
+      .then((dados) => { if (!controller.signal.aborted) { setPessoasDisponiveis(dados); setErroPessoasDisponiveis(""); } })
+      .catch((error: unknown) => {
+        if (!controller.signal.aborted) {
+          setErroPessoasDisponiveis(error instanceof Error ? error.message : "Não foi possível carregar as pessoas disponíveis para a composição familiar.");
+        }
       });
     return () => controller.abort();
   }, [tentativa]);
@@ -472,62 +495,23 @@ export default function PessoasPage({
     setTentativa((valor) => valor + 1);
   }
 
-  const [busca, setBusca] = useState("");
   const [ordemAscendente, setOrdemAscendente] = useState(true);
   const [editando, setEditando] = useState<Pessoa | null>(null);
-  const [formularioAberto, setFormularioAberto] = useState(contextoInicial !== "PESSOA" || Boolean(familiaEmEdicao));
-  const [contexto, setContexto] = useState<"PESSOA" | "FAMILIA" | "IDOSA">(familiaEmEdicao?.contexto ?? contextoInicial);
-  const [dadosContextuais, setDadosContextuais] = useState<DadosContextuais>(() => familiaEmEdicao ? {
-    nomeMae: familiaEmEdicao.nomeMae,
-    sexo: familiaEmEdicao.sexo,
-    estadoCivil: familiaEmEdicao.estadoCivil,
-    rg: familiaEmEdicao.rg,
-    nis: familiaEmEdicao.nis,
-    residencia: familiaEmEdicao.residencia,
-    valorAluguel: familiaEmEdicao.valorAluguel,
-    escolaridade: familiaEmEdicao.escolaridade,
-    ocupacao: familiaEmEdicao.ocupacao,
-    contato2: familiaEmEdicao.contato2,
-    rendas: familiaEmEdicao.rendas,
-    membros: familiaEmEdicao.membros,
-    relatos: familiaEmEdicao.relatos,
-    vinculos: familiaEmEdicao.vinculos,
-    questionario: familiaEmEdicao.questionario,
-    encaminhamentos: familiaEmEdicao.encaminhamentos,
-  } : dadosContextuaisVazios());
-  const [draft, setDraft] = useState<Draft>(() => familiaEmEdicao ? {
-    ...draftVazio,
-    tipo: "FISICA",
-    nome: familiaEmEdicao.nome,
-    cpf: formatarCpf(familiaEmEdicao.cpf),
-    dataNascimento: familiaEmEdicao.dataNascimento,
-    email: familiaEmEdicao.email,
-    telefone: formatarTelefone(familiaEmEdicao.telefone),
-    cep: formatarCep(familiaEmEdicao.cep),
-    logradouro: familiaEmEdicao.logradouro,
-    numero: familiaEmEdicao.numero,
-    bairro: familiaEmEdicao.bairro,
-    cidade: familiaEmEdicao.cidade,
-    estado: familiaEmEdicao.estado,
-  } : draftVazio);
+  const [formularioAberto, setFormularioAberto] = useState(false);
+  const [contexto, setContexto] = useState<"PESSOA" | "FAMILIA" | "IDOSA">("PESSOA");
+  const [dadosContextuais, setDadosContextuais] = useState<DadosContextuais>(dadosContextuaisVazios);
+  const [draft, setDraft] = useState<Draft>(draftVazio);
   const [erro, setErro] = useState("");
   const [errosCampos, setErrosCampos] = useState<ErrosCampos>({});
   const [errosContextuais, setErrosContextuais] = useState<ErrosContextuais>({});
   const [aviso, setAviso] = useState("");
 
   const pessoasFiltradas = useMemo(() => {
-    const termo = busca.trim().toLocaleLowerCase("pt-BR");
-    const digitos = apenasNumeros(busca);
     return pessoas
-      .filter((pessoa) =>
-        !termo ||
-        nomePessoa(pessoa).toLocaleLowerCase("pt-BR").includes(termo) ||
-        (digitos.length > 0 && apenasNumeros(documentoPessoa(pessoa)).includes(digitos)),
-      )
       .sort((a, b) =>
         nomePessoa(a).localeCompare(nomePessoa(b), "pt-BR") * (ordemAscendente ? 1 : -1),
       );
-  }, [pessoas, busca, ordemAscendente]);
+  }, [pessoas, ordemAscendente]);
 
   function atualizar(campo: CampoTexto, valor: string) {
     const formatadores: Partial<Record<CampoTexto, (entrada: string) => string>> = {
@@ -575,22 +559,27 @@ export default function PessoasPage({
     window.scrollTo(0, 0);
   }
 
-  function abrirEdicao(pessoa: Pessoa) {
-    setEditando(pessoa);
-    setDraft(draftDePessoa(pessoa));
-    setErro("");
-    setErrosCampos({});
-    setErrosContextuais({});
+  async function abrirEdicao(pessoa: Pessoa) {
+    if (!pessoa.status || consultando) return;
+    setConsultando(pessoa.id);
     setAviso("");
-    setFormularioAberto(true);
-    window.scrollTo(0, 0);
+    try {
+      const completa = await buscarPessoa(pessoa.id);
+      setEditando(completa);
+      setDraft(draftDePessoa(completa));
+      setErro("");
+      setErrosCampos({});
+      setErrosContextuais({});
+      setFormularioAberto(true);
+      window.scrollTo(0, 0);
+    } catch (error) {
+      setAviso(error instanceof Error ? error.message : "Não foi possível consultar a pessoa.");
+    } finally {
+      setConsultando(null);
+    }
   }
 
   function voltar() {
-    if (contexto !== "PESSOA" && onConcluirContexto) {
-      onConcluirContexto();
-      return;
-    }
     setFormularioAberto(false);
     setEditando(null);
     setErro("");
@@ -603,13 +592,11 @@ export default function PessoasPage({
     if (draft.tipo === "FISICA") {
       if (!draft.nome.trim()) falhas.nome = "Informe o nome completo.";
       if (!cpfValido(draft.cpf)) falhas.cpf = "Informe um CPF válido.";
-      else if (pessoas.some((pessoa) =>
-        pessoa.id !== (editando?.id ?? familiaEmEdicao?.responsavelId) && pessoa.tipo === "FISICA" &&
-        pessoa.cpf === apenasNumeros(draft.cpf))) {
-        falhas.cpf = "Este CPF já está cadastrado.";
-      }
-      if (!draft.dataNascimento) falhas.dataNascimento = "Informe a data de nascimento.";
-      else if (draft.dataNascimento > hojeLocal()) falhas.dataNascimento = "A data não pode ser futura.";
+      if (!draft.dataNascimento && !draft.idade) {
+        falhas.dataNascimento = "Informe a data de nascimento ou a idade.";
+        falhas.idade = "Informe a idade ou a data de nascimento.";
+      } else if (draft.dataNascimento > hojeLocal()) falhas.dataNascimento = "A data não pode ser futura.";
+      if (draft.idade && (!/^\d+$/.test(draft.idade) || Number(draft.idade) > 130)) falhas.idade = "Informe uma idade válida.";
       if (draft.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(draft.email.trim())) {
         falhas.email = "Informe um e-mail válido.";
       }
@@ -618,11 +605,6 @@ export default function PessoasPage({
       if (draft.concederAcesso) {
         if (!draft.email.trim()) falhas.email = "Informe o e-mail para contato e recuperação de senha.";
         if (!draft.usuario.trim()) falhas.usuario = "Informe um usuário de login.";
-        else if (pessoas.some((pessoa) =>
-          pessoa.id !== editando?.id && pessoa.tipo === "FISICA" &&
-          pessoa.usuario.toLocaleLowerCase("pt-BR") === draft.usuario.trim().toLocaleLowerCase("pt-BR"))) {
-          falhas.usuario = "Este usuário já está em uso.";
-        }
         if (!editando && !draft.senha) falhas.senha = "Defina uma senha.";
         else if (draft.senha && draft.senha.length < 8) falhas.senha = "A senha deve conter no mínimo 8 caracteres.";
         if (editando && !draft.senha && draft.confirmarSenha) falhas.senha = "Informe a nova senha.";
@@ -644,11 +626,6 @@ export default function PessoasPage({
     } else {
       if (!draft.razaoSocial.trim()) falhas.razaoSocial = "Informe a razão social.";
       if (!cnpjValido(draft.cnpj)) falhas.cnpj = "Informe um CNPJ válido.";
-      else if (pessoas.some((pessoa) =>
-        pessoa.id !== editando?.id && pessoa.tipo === "JURIDICA" &&
-        pessoa.cnpj === apenasNumeros(draft.cnpj))) {
-        falhas.cnpj = "Este CNPJ já está cadastrado.";
-      }
       const telefone = apenasNumeros(draft.telefone);
       if (telefone.length !== 10 && telefone.length !== 11) falhas.telefone = "Informe telefone com DDD.";
     }
@@ -657,7 +634,7 @@ export default function PessoasPage({
     if (!draft.numero.trim()) falhas.numero = "Informe o número.";
     if (!draft.bairro.trim()) falhas.bairro = "Informe o bairro.";
     if (!draft.cidade.trim()) falhas.cidade = "Informe a cidade.";
-    if (!/^[A-Za-z]{2}$/.test(draft.estado.trim())) falhas.estado = "Informe a sigla do estado (UF).";
+    if (!estadosBrasileiros.some(([uf]) => uf === draft.estado)) falhas.estado = "Selecione o estado.";
     return falhas;
   }
 
@@ -700,9 +677,6 @@ export default function PessoasPage({
       cidade: draft.cidade.trim(),
       estado: draft.estado.trim().toUpperCase(),
     };
-    const responsavelExistente = familiaEmEdicao
-      ? pessoas.find((pessoa) => pessoa.id === familiaEmEdicao.responsavelId && pessoa.tipo === "FISICA")
-      : undefined;
     const dados: DadosPessoa = draft.tipo === "FISICA"
       ? {
           ...base,
@@ -710,13 +684,10 @@ export default function PessoasPage({
           nome: draft.nome.trim(),
           cpf: apenasNumeros(draft.cpf),
           dataNascimento: draft.dataNascimento,
+          idadeInformada: draft.dataNascimento ? null : Number(draft.idade),
           email: draft.email.trim(),
-          usuario: contexto !== "PESSOA" && responsavelExistente?.tipo === "FISICA"
-            ? responsavelExistente.usuario
-            : draft.concederAcesso ? draft.usuario.trim() : "",
-          perfil: contexto !== "PESSOA" && responsavelExistente?.tipo === "FISICA"
-            ? responsavelExistente.perfil
-            : draft.concederAcesso ? draft.perfil : "",
+          usuario: draft.concederAcesso ? draft.usuario.trim() : editando?.tipo === "FISICA" ? editando.usuario : "",
+          perfil: draft.concederAcesso ? draft.perfil : editando?.tipo === "FISICA" ? editando.perfil : "",
           senha: draft.concederAcesso ? draft.senha : undefined,
           ...(contexto === "PESSOA" && editando?.tipo === "FISICA" ? {
             nomeMae: editando.nomeMae,
@@ -751,23 +722,20 @@ export default function PessoasPage({
     setErro("");
     try {
       if (contexto !== "PESSOA") {
-        const pessoa = await salvarPessoa(dados, familiaEmEdicao?.responsavelId);
-        await salvarFamilia({ ...dadosContextuais, responsavelId: pessoa.id }, familiaEmEdicao?.id);
-        if (contexto === "IDOSA") {
-          await salvarAtendimento({ ...dadosContextuais, fisicaId: pessoa.id }, familiaEmEdicao?.atendimentoId);
-        } else if (familiaEmEdicao?.atendimentoId) {
-          await inativarAtendimento(familiaEmEdicao.atendimentoId);
-        }
-        if (onConcluirContexto) onConcluirContexto();
-        else voltar();
+        await salvarCadastroContextual(
+          contexto,
+          dados,
+          dadosContextuais,
+        );
+        voltar();
         return;
       }
-      const pessoa = await salvarPessoa(dados, editando?.id);
-      setPessoas((anteriores) => editando
-        ? anteriores.map((item) => item.id === pessoa.id ? pessoa : item)
-        : [...anteriores, pessoa]);
+      const removendoAcesso = Boolean(editando?.tipo === "FISICA" && editando.usuario && !draft.concederAcesso);
+      await salvarPessoa(dados, editando?.id);
+      if (removendoAcesso && editando) await removerAcessoPessoa(editando.id);
       voltar();
       setAviso(editando ? "Pessoa atualizada com sucesso." : "Pessoa cadastrada com sucesso.");
+      setTentativa((valor) => valor + 1);
     } catch (error) {
       setErro(error instanceof Error ? error.message : "Não foi possível salvar a pessoa.");
     } finally {
@@ -776,7 +744,7 @@ export default function PessoasPage({
     }
   }
 
-  async function inativar(pessoa: Pessoa) {
+  async function alterarStatusPessoa(pessoa: Pessoa, acao: "inativar" | "reativar") {
     if (operacaoEmCurso.current) return;
     if (pessoa.tipo === "FISICA" &&
         pessoa.usuario.toLocaleLowerCase("pt-BR") === usuarioAtual.toLocaleLowerCase("pt-BR")) {
@@ -784,17 +752,20 @@ export default function PessoasPage({
       return;
     }
     operacaoEmCurso.current = true;
-    setInativando(pessoa.id);
+    setAlterandoStatus(pessoa.id);
     setAviso("");
     try {
-      await inativarPessoa(pessoa.id);
+      if (acao === "inativar") await inativarPessoa(pessoa.id);
+      else await reativarPessoa(pessoa.id);
       setPessoas((anteriores) => anteriores.filter((item) => item.id !== pessoa.id));
-      setAviso("Pessoa inativada com sucesso.");
+      setAviso(`Pessoa ${acao === "inativar" ? "inativada" : "reativada"} com sucesso.`);
+      setTentativa((valor) => valor + 1);
     } catch (error) {
-      setAviso(error instanceof Error ? error.message : "Não foi possível inativar a pessoa.");
+      setAviso(error instanceof Error ? error.message : "Não foi possível alterar o status da pessoa.");
     } finally {
       operacaoEmCurso.current = false;
-      setInativando(null);
+      setAlterandoStatus(null);
+      setConfirmacao(null);
     }
   }
 
@@ -819,13 +790,23 @@ export default function PessoasPage({
       <div className={`mb-3 flex items-center gap-2 overflow-x-auto whitespace-nowrap text-[#606b79] ${formularioAberto ? "text-[15px]" : "text-xs"}`}>
         <span>Sistema</span><ChevronRight size={13} /><span>Administração</span>
         <ChevronRight size={13} /><span className="text-[#273440]">Pessoas</span>
-        {formularioAberto && <><ChevronRight size={13} /><span>{editando || familiaEmEdicao ? "Editar" : "Novo cadastro"}</span></>}
+        {formularioAberto && <><ChevronRight size={13} /><span>{editando ? "Editar" : "Novo cadastro"}</span></>}
       </div>
 
       {aviso && (
         <div role="status" className="mb-5 flex items-start justify-between gap-3 rounded-xl border border-[#bde0f4] bg-[#eaf7ff] px-4 py-3 text-sm text-[#0d5d86]">
           <span>{aviso}</span>
           <button type="button" onClick={() => setAviso("")} aria-label="Fechar aviso"><X size={16} /></button>
+        </div>
+      )}
+
+      {confirmacao && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#273440]/45 p-4" role="dialog" aria-modal="true" aria-labelledby="confirmar-status-pessoa">
+          <div className="w-full max-w-md rounded-2xl border border-[#d9e1ea] bg-white p-6 shadow-xl">
+            <h2 id="confirmar-status-pessoa" className="text-lg font-semibold">{confirmacao.acao === "inativar" ? "Inativar" : "Reativar"} pessoa?</h2>
+            <p className="mt-2 text-sm leading-6 text-[#606b79]">Confirme a alteração de status de {nomePessoa(confirmacao.pessoa)}.</p>
+            <div className="mt-6 flex justify-end gap-3"><Button type="button" variant="ghost" onClick={() => setConfirmacao(null)}>Cancelar</Button><Button type="button" onClick={() => alterarStatusPessoa(confirmacao.pessoa, confirmacao.acao)} className="bg-[#4697c5] text-white hover:bg-[#67a0c0]">Confirmar</Button></div>
+          </div>
         </div>
       )}
 
@@ -836,7 +817,7 @@ export default function PessoasPage({
               <h1 className="text-[28px] font-bold tracking-tight">Gerenciamento de pessoas</h1>
               <p className="mt-1 text-sm text-[#606b79]">Cadastre e acompanhe pessoas físicas e jurídicas em um só lugar.</p>
             </div>
-            <Button type="button" disabled={carregando || Boolean(erroListagem) || inativando !== null} onClick={abrirCadastro} className="h-10 gap-2 bg-[#4697c5] px-4 text-white hover:bg-[#67a0c0]">
+            <Button type="button" disabled={carregando || Boolean(erroListagem) || alterandoStatus !== null} onClick={abrirCadastro} className="h-10 gap-2 bg-[#4697c5] px-4 text-white hover:bg-[#67a0c0]">
               <Plus size={17} /> Nova pessoa
             </Button>
           </div>
@@ -851,13 +832,16 @@ export default function PessoasPage({
                 <button type="button" onClick={() => setOrdemAscendente((valor) => !valor)} className="flex h-10 shrink-0 items-center gap-1 rounded-lg border border-[#d9e1ea] px-3 text-sm text-[#606b79] md:hidden" aria-label="Ordenar por nome">
                   <ArrowUpDown size={16} /> Nome
                 </button>
+                <select aria-label="Filtrar pessoas por status" value={statusFiltro ? "ativas" : "inativas"} onChange={(event) => { setStatusFiltro(event.target.value === "ativas"); setCarregando(true); setErroListagem(""); }} className="h-10 rounded-lg border border-[#d9e1ea] bg-white px-3 text-sm text-[#606b79] shadow-sm outline-none focus-visible:border-[#4697c5] focus-visible:ring-2 focus-visible:ring-[#4697c5]/30">
+                  <option value="ativas">Ativas</option><option value="inativas">Inativas</option>
+                </select>
                 <div className="relative min-w-0 flex-1 sm:w-80">
                   <Search size={17} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#748393]" />
                   <Input
                     type="search"
                     aria-label="Buscar por nome ou CPF/CNPJ"
                     value={busca}
-                    onChange={(event) => setBusca(event.target.value)}
+                    onChange={(event) => { setBusca(event.target.value); setCarregando(true); setErroListagem(""); }}
                     placeholder="Buscar por nome ou CPF/CNPJ"
                     className={`${inputClass} pl-9`}
                   />
@@ -877,7 +861,7 @@ export default function PessoasPage({
                 <span className="flex size-14 items-center justify-center rounded-2xl bg-[#eaf7ff] text-[#4697c5]"><UsersRound size={27} /></span>
                 <h3 className="mt-4 font-semibold">{busca ? "Nenhuma pessoa encontrada" : "Nenhuma pessoa cadastrada"}</h3>
                 <p className="mt-1 max-w-sm text-sm text-[#606b79]">{busca ? "Tente outro nome ou documento." : "Comece cadastrando a primeira pessoa física ou jurídica."}</p>
-                {!busca && <Button type="button" disabled={carregando || Boolean(erroListagem) || inativando !== null} onClick={abrirCadastro} className="mt-5 bg-[#4697c5] text-white hover:bg-[#67a0c0]"><Plus size={16} /> Nova pessoa</Button>}
+                {!busca && statusFiltro && <Button type="button" disabled={carregando || Boolean(erroListagem) || alterandoStatus !== null} onClick={abrirCadastro} className="mt-5 bg-[#4697c5] text-white hover:bg-[#67a0c0]"><Plus size={16} /> Nova pessoa</Button>}
               </div>
             ) : (
               <>
@@ -885,14 +869,14 @@ export default function PessoasPage({
                 {pessoasFiltradas.map((pessoa) => (
                   <div key={pessoa.id} className="rounded-xl border border-[#e5eaf0] p-4">
                     <div className="flex items-start justify-between gap-3">
-                      <button type="button" disabled={inativando !== null} onClick={() => abrirEdicao(pessoa)} className="text-left font-semibold hover:text-[#4697c5]">{nomePessoa(pessoa)}</button>
+                      <button type="button" disabled={!pessoa.status || alterandoStatus !== null || consultando !== null} onClick={() => abrirEdicao(pessoa)} className="text-left font-semibold hover:text-[#4697c5] disabled:cursor-default disabled:hover:text-inherit">{nomePessoa(pessoa)}</button>
                       <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${pessoa.status ? "bg-[#e6f7ee] text-[#19704b]" : "bg-[#f1f3f5] text-[#606b79]"}`}>{pessoa.status ? "Ativa" : "Inativa"}</span>
                     </div>
                     <p className="mt-1 text-sm text-[#606b79]">Pessoa {pessoa.tipo === "FISICA" ? "física" : "jurídica"} · {documentoFormatado(pessoa)}</p>
                     <p className="mt-1 text-sm text-[#606b79]">{formatarTelefone(pessoa.telefone)}</p>
                     <div className="mt-3 flex gap-3 border-t border-[#e5eaf0] pt-3 text-sm font-medium text-[#0d5d86]">
-                      <button type="button" disabled={inativando !== null} onClick={() => abrirEdicao(pessoa)}>Editar</button>
-                      <button type="button" disabled={inativando !== null} onClick={() => inativar(pessoa)}>{inativando === pessoa.id ? "Inativando..." : "Inativar"}</button>
+                      {pessoa.status && <button type="button" disabled={alterandoStatus !== null || consultando !== null} onClick={() => abrirEdicao(pessoa)}>{consultando === pessoa.id ? "Consultando..." : "Editar"}</button>}
+                      <button type="button" disabled={alterandoStatus !== null} onClick={() => setConfirmacao({ pessoa, acao: pessoa.status ? "inativar" : "reativar" })}>{alterandoStatus === pessoa.id ? "Processando..." : pessoa.status ? "Inativar" : "Reativar"}</button>
                     </div>
                   </div>
                 ))}
@@ -918,7 +902,7 @@ export default function PessoasPage({
                     {pessoasFiltradas.map((pessoa) => (
                       <tr key={pessoa.id} className="border-b border-[#edf0f3] last:border-0">
                         <td className="py-4 pr-4 font-medium">
-                          <button type="button" disabled={inativando !== null} onClick={() => abrirEdicao(pessoa)} className="text-left hover:text-[#4697c5]">{nomePessoa(pessoa)}</button>
+                          <button type="button" disabled={!pessoa.status || alterandoStatus !== null || consultando !== null} onClick={() => abrirEdicao(pessoa)} className="text-left hover:text-[#4697c5] disabled:cursor-default disabled:hover:text-inherit">{nomePessoa(pessoa)}</button>
                         </td>
                         <td className="py-4 pr-4 text-[#606b79]">{pessoa.tipo === "FISICA" ? "Física" : "Jurídica"}</td>
                         <td className="py-4 pr-4 text-[#606b79]">{documentoFormatado(pessoa)}</td>
@@ -926,8 +910,8 @@ export default function PessoasPage({
                         <td className="py-4 pr-4"><span className={`rounded-full px-2.5 py-1 text-xs font-medium ${pessoa.status ? "bg-[#e6f7ee] text-[#19704b]" : "bg-[#f1f3f5] text-[#606b79]"}`}>{pessoa.status ? "Ativa" : "Inativa"}</span></td>
                         <td className="py-4 text-right">
                           <div className="flex justify-end gap-2">
-                            <button type="button" disabled={inativando !== null} onClick={() => abrirEdicao(pessoa)} className="rounded-lg p-2 text-[#606b79] hover:bg-[#eaf7ff] hover:text-[#4697c5]" aria-label={`Editar ${nomePessoa(pessoa)}`}><Pencil size={16} /></button>
-                            <button type="button" disabled={inativando !== null} onClick={() => inativar(pessoa)} className="rounded-lg px-2 py-1 text-xs font-medium text-[#0d5d86] hover:bg-[#eaf7ff]">{inativando === pessoa.id ? "Inativando..." : "Inativar"}</button>
+                            {pessoa.status && <button type="button" disabled={alterandoStatus !== null || consultando !== null} onClick={() => abrirEdicao(pessoa)} className="rounded-lg p-2 text-[#606b79] hover:bg-[#eaf7ff] hover:text-[#4697c5]" aria-label={`Editar ${nomePessoa(pessoa)}`}><Pencil size={16} /></button>}
+                            <button type="button" disabled={alterandoStatus !== null} onClick={() => setConfirmacao({ pessoa, acao: pessoa.status ? "inativar" : "reativar" })} className="rounded-lg px-2 py-1 text-xs font-medium text-[#0d5d86] hover:bg-[#eaf7ff]">{alterandoStatus === pessoa.id ? "Processando..." : pessoa.status ? "Inativar" : "Reativar"}</button>
                           </div>
                         </td>
                       </tr>
@@ -942,12 +926,13 @@ export default function PessoasPage({
       ) : (
         <div className="w-full">
           <div className="mb-8">
-            <h1 className="text-[30px] font-bold tracking-tight">{editando || familiaEmEdicao ? "Editar cadastro" : "Novo cadastro"}</h1>
-            <p className="mt-1 text-base leading-6 text-[#606b79]">{editando || familiaEmEdicao ? "Atualize os dados cadastrais no Centro Social." : "Preencha os dados do cadastro no Centro Social."}</p>
+            <h1 className="text-[30px] font-bold tracking-tight">{editando ? "Editar cadastro" : "Novo cadastro"}</h1>
+            <p className="mt-1 text-base leading-6 text-[#606b79]">{editando ? "Atualize os dados cadastrais no Centro Social." : "Preencha os dados do cadastro no Centro Social."}</p>
           </div>
           <form onSubmit={salvar} noValidate aria-busy={salvando}>
             <fieldset disabled={salvando} className="space-y-8">
             {erro && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-base text-red-700">{erro}</div>}
+            {erroPessoasDisponiveis && contexto !== "PESSOA" && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-base text-red-700">{erroPessoasDisponiveis}</div>}
             <section className="rounded-xl border border-[#4697c5]/25 bg-[#4697c5]/[.045] p-5 sm:p-6">
               <Label htmlFor="contextoCadastro" className={labelClass}>Tipo de cadastro</Label>
               <select
@@ -1009,12 +994,14 @@ export default function PessoasPage({
                 <p className="mt-1 text-base leading-6 text-[#606b79]">{draft.tipo === "FISICA" ? "Informações de identificação e contato." : "Informações de identificação e contato da organização."}</p>
               </div>
               {draft.tipo === "FISICA" ? (
-                <div className="grid gap-5 sm:grid-cols-2">
+                <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
                   <div className="sm:col-span-2">{campo("nome", "Nome completo", { required: true, placeholder: "Digite o nome completo" })}</div>
                   {campo("cpf", "CPF", { required: true, readOnly: Boolean(editando), inputMode: "numeric", maxLength: 14, placeholder: "000.000.000-00", hint: editando ? "O CPF não pode ser alterado após o cadastro." : undefined })}
-                  {campo("dataNascimento", "Data de nascimento", { required: true, type: "date", max: hojeLocal() })}
+                  <Field key={`nascimento-${draft.dataNascimento ? "preenchido" : "vazio"}`} id="dataNascimento" label="Data de nascimento" value={draft.dataNascimento} onChange={(valor) => { atualizar("dataNascimento", valor); if (valor) atualizar("idade", ""); }} type="date" max={hojeLocal()} error={errosCampos.dataNascimento} />
+                  <Field id="idade" label="Idade" value={draft.idade} onChange={(valor) => { atualizar("idade", valor.replace(/\D/g, "").slice(0, 3)); if (valor) atualizar("dataNascimento", ""); }} inputMode="numeric" maxLength={3} placeholder="Informe se não souber a data" error={errosCampos.idade} />
                   {campo("telefone", "Telefone", { required: true, type: "tel", inputMode: "tel", placeholder: "(00) 00000-0000" })}
                   {campo("email", "E-mail pessoal", { required: draft.concederAcesso, type: "email", inputMode: "email", placeholder: "nome@email.com", hint: draft.concederAcesso ? "Usado para contato e recuperação de senha." : undefined, highlightHint: draft.concederAcesso })}
+                  {contexto !== "PESSOA" && <CamposIdentificacaoComplementar dados={dadosContextuais} onChange={(dados) => { setDadosContextuais(dados); setErrosContextuais({}); }} errors={errosContextuais} />}
                 </div>
               ) : (
                 <div className="grid gap-5 sm:grid-cols-[1.5fr_1fr]">
@@ -1091,15 +1078,22 @@ export default function PessoasPage({
                 {campo("numero", "Número", { required: true, placeholder: "Nº" })}
                 {campo("bairro", "Bairro", { required: true, placeholder: "Bairro" })}
                 {campo("cidade", "Cidade", { required: true, placeholder: "Cidade" })}
-                {campo("estado", "Estado", { required: true, maxLength: 2, placeholder: "Selecione" })}
+                <div className="min-w-0">
+                  <Label htmlFor="estado" className={labelClass}>Estado <span aria-label="obrigatório" className="text-red-700"> *</span></Label>
+                  <select id="estado" value={draft.estado} onChange={(event) => atualizar("estado", event.target.value)} required aria-invalid={Boolean(errosCampos.estado)} aria-describedby={errosCampos.estado ? "estado-erro" : undefined} className={`${formInputClass} w-full outline-none focus-visible:border-[#4697c5] focus-visible:ring-2 focus-visible:ring-[#4697c5]/30 ${errosCampos.estado ? "border-red-500" : ""}`}>
+                    <option value="">Selecione</option>
+                    {estadosBrasileiros.map(([uf, nome]) => <option key={uf} value={uf}>{uf} - {nome}</option>)}
+                  </select>
+                  {errosCampos.estado && <FieldMessage id="estado-erro" tone="error">{errosCampos.estado}</FieldMessage>}
+                </div>
               </div>
             </section>
 
-            {contexto !== "PESSOA" && <DadosAssistenciais contexto={contexto} dados={dadosContextuais} dataNascimento={draft.dataNascimento} onChange={(dados) => { setDadosContextuais(dados); setErrosContextuais({}); }} errors={errosContextuais} pessoasDisponiveis={pessoas.filter((pessoa) => pessoa.tipo === "FISICA" && pessoa.id !== familiaEmEdicao?.responsavelId && (!pessoa.familiaId || dadosContextuais.membros.some((membro) => membro.pessoaId === pessoa.id)))} />}
+            {contexto !== "PESSOA" && <DadosAssistenciais contexto={contexto} dados={dadosContextuais} onChange={(dados) => { setDadosContextuais(dados); setErrosContextuais({}); }} errors={errosContextuais} pessoasDisponiveis={pessoasDisponiveis.filter((pessoa) => pessoa.tipo === "FISICA" && (!pessoa.familiaId || dadosContextuais.membros.some((membro) => membro.pessoaId === pessoa.id)))} />}
 
             <div className="flex justify-end gap-3 border-t border-[#d9e1ea] pb-8 pt-6">
               <Button type="button" variant="ghost" onClick={voltar} className="h-10 px-4 text-base">Cancelar</Button>
-              <Button type="submit" className="h-10 bg-[#4697c5] px-5 text-base text-white hover:bg-[#67a0c0]">{salvando ? "Salvando..." : editando || familiaEmEdicao ? "Salvar alterações" : "Salvar cadastro"}</Button>
+              <Button type="submit" className="h-10 bg-[#4697c5] px-5 text-base text-white hover:bg-[#67a0c0]">{salvando ? "Salvando..." : editando ? "Salvar alterações" : "Salvar cadastro"}</Button>
             </div>
             </fieldset>
           </form>

@@ -29,6 +29,7 @@ export type Pessoa =
       nome: string;
       cpf: string;
       dataNascimento: string;
+      idade: number | null;
       email: string;
       usuario: string;
       perfil: Perfil | "";
@@ -48,8 +49,6 @@ export type Pessoa =
       cnpj: string;
     });
 
-const API_URL = "http://localhost:8080/api/pessoas";
-
 const perfisApi = {
   Administrador: "ADMINISTRADOR",
   "Atendimento/Gestão": "ATENDIMENTO_GESTAO",
@@ -64,8 +63,9 @@ type PessoaApi = Omit<PessoaBase, "id"> & {
   id: number;
   nome: string;
   cpf: string;
-  dataNascimento: string;
-  email: string;
+  dataNascimento: string | null;
+  idade: number | null;
+  email: string | null;
   usuario: string | null;
   perfil: string | null;
   razaoSocial: string;
@@ -85,6 +85,7 @@ export type DadosPessoa = Omit<PessoaBase, "id" | "status" | "dataCriacao" | "da
   nome?: string;
   cpf?: string;
   dataNascimento?: string;
+  idadeInformada?: number | null;
   email?: string;
   usuario?: string;
   perfil?: Perfil | "";
@@ -107,6 +108,9 @@ function converterPessoa(dados: PessoaApi): Pessoa {
   return {
     ...base,
     tipo: "FISICA",
+    dataNascimento: dados.dataNascimento ?? "",
+    idade: dados.idade,
+    email: dados.email ?? "",
     usuario: dados.usuario ?? "",
     perfil: perfis.find((perfil) => perfisApi[perfil] === dados.perfil) ?? "",
     nomeMae: dados.nomeMae ?? "",
@@ -119,32 +123,6 @@ function converterPessoa(dados: PessoaApi): Pessoa {
     contato2: dados.contato2 ?? "",
     familiaId: dados.familiaId == null ? undefined : String(dados.familiaId),
   };
-}
-
-async function requisitar(caminho = "", opcoes: RequestInit = {}): Promise<Response> {
-  const token = localStorage.getItem("token");
-  if (!token) throw new Error("Sua sessão expirou. Entre novamente no sistema.");
-  let resposta: Response;
-  try {
-    resposta = await fetch(`${API_URL}${caminho}`, {
-      ...opcoes,
-      headers: {
-        Authorization: `Bearer ${token}`,
-        ...(opcoes.body ? { "Content-Type": "application/json" } : {}),
-      },
-    });
-  } catch {
-    throw new Error("Não foi possível conectar ao servidor. Tente novamente.");
-  }
-  if (!resposta.ok) {
-    if (resposta.status === 401) throw new Error("Sua sessão expirou. Entre novamente no sistema.");
-    if (resposta.status === 403) throw new Error("Você não tem permissão para realizar esta operação.");
-    const erro: unknown = await resposta.json().catch(() => null);
-    const mensagem = erro && typeof erro === "object" && "message" in erro && typeof erro.message === "string"
-      ? erro.message : "Não foi possível concluir a operação. Tente novamente.";
-    throw new Error(mensagem);
-  }
-  return resposta;
 }
 
 export function apenasNumeros(valor: string) {
@@ -221,31 +199,54 @@ export function documentoFormatado(pessoa: Pessoa) {
   return pessoa.tipo === "FISICA" ? formatarCpf(pessoa.cpf) : formatarCnpj(pessoa.cnpj);
 }
 
-export async function listarPessoas(signal?: AbortSignal): Promise<Pessoa[]> {
-  const resposta = await requisitar("", { signal });
+export async function listarPessoas(signal?: AbortSignal, filtros: { busca?: string; status?: boolean } = {}): Promise<Pessoa[]> {
+  const parametros = new URLSearchParams();
+  if (filtros.busca?.trim()) parametros.set("busca", filtros.busca.trim());
+  if (filtros.status !== undefined) parametros.set("status", String(filtros.status));
+  const resposta = await requisitarApi(`/pessoas${parametros.size ? `?${parametros}` : ""}`, { signal });
   const pessoas: PessoaApi[] = await resposta.json();
   return pessoas.map(converterPessoa);
 }
 
-export async function salvarPessoa(dados: DadosPessoa, id?: string): Promise<Pessoa> {
-  const { tipo, perfil, senha, sexo, estadoCivil, escolaridade, ...campos } = dados;
-  const caminho = tipo === "FISICA" ? "/fisicas" : "/juridicas";
-  const resposta = await requisitar(`${caminho}${id ? `/${encodeURIComponent(id)}` : ""}`, {
-    method: id ? "PUT" : "POST",
-    body: JSON.stringify({
-      ...campos,
-      ...(tipo === "FISICA" ? {
+export async function buscarPessoa(id: string, signal?: AbortSignal): Promise<Pessoa> {
+  const resposta = await requisitarApi(`/pessoas/${encodeURIComponent(id)}`, { signal });
+  return converterPessoa(await resposta.json());
+}
+
+export function montarPessoaRequest(dados: DadosPessoa) {
+  const { tipo, perfil, senha, sexo, estadoCivil, escolaridade, dataNascimento, idadeInformada, ...campos } = dados;
+  return {
+    ...campos,
+    ...(tipo === "FISICA" ? {
+        dataNascimento: dataNascimento || null,
+        idadeInformada: dataNascimento ? null : idadeInformada ?? null,
         perfil: perfil ? perfisApi[perfil] : null,
         ...(sexo !== undefined ? { sexo: sexo ? sexoApi[sexo] : null } : {}),
         ...(estadoCivil !== undefined ? { estadoCivil: estadoCivil ? estadoCivilApi[estadoCivil] : null } : {}),
         ...(escolaridade !== undefined ? { escolaridade: escolaridade ? escolaridadeApi[escolaridade] : null } : {}),
         ...(senha ? { senha } : {}),
       } : {}),
-    }),
+  };
+}
+
+export async function salvarPessoa(dados: DadosPessoa, id?: string): Promise<Pessoa> {
+  const caminho = dados.tipo === "FISICA" ? "/fisicas" : "/juridicas";
+  const resposta = await requisitarApi(`/pessoas${caminho}${id ? `/${encodeURIComponent(id)}` : ""}`, {
+    method: id ? "PUT" : "POST",
+    body: JSON.stringify(montarPessoaRequest(dados)),
   });
   return converterPessoa(await resposta.json());
 }
 
 export async function inativarPessoa(id: string): Promise<void> {
-  await requisitar(`/${encodeURIComponent(id)}`, { method: "DELETE" });
+  await requisitarApi(`/pessoas/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
+
+export async function reativarPessoa(id: string): Promise<void> {
+  await requisitarApi(`/pessoas/${encodeURIComponent(id)}/reativar`, { method: "PATCH" });
+}
+
+export async function removerAcessoPessoa(id: string): Promise<void> {
+  await requisitarApi(`/pessoas/fisicas/${encodeURIComponent(id)}/acesso`, { method: "DELETE" });
+}
+import { requisitarApi } from "@/services/apiService";

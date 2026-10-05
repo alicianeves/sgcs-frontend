@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
+  formatarMoeda,
   perguntasIdosa,
   type DadosContextuais,
   type MembroFamilia,
@@ -13,7 +14,6 @@ import type { Pessoa } from "@/services/pessoaService";
 type Props = {
   contexto: "FAMILIA" | "IDOSA";
   dados: DadosContextuais;
-  dataNascimento: string;
   onChange: (dados: DadosContextuais) => void;
   errors?: ErrosContextuais;
   pessoasDisponiveis: Pessoa[];
@@ -46,13 +46,27 @@ function Cabecalho({ titulo, descricao }: { titulo: string; descricao: string })
   return <div className="mb-5"><h2 className="text-lg font-semibold">{titulo}</h2><p className="mt-1 text-base leading-6 text-[#606b79]">{descricao}</p></div>;
 }
 
-function Campo({ id, label, value, onChange, type = "text", placeholder, readOnly = false, required = false, error }: {
-  id: string; label: string; value: string; onChange: (valor: string) => void; type?: string; placeholder?: string; readOnly?: boolean; required?: boolean; error?: string;
+function Campo({ id, label, value, onChange, onBlur, type = "text", placeholder, readOnly = false, required = false, error, min, max, inputMode }: {
+  id: string; label: string; value: string; onChange: (valor: string) => void; onBlur?: () => void; type?: string; placeholder?: string; readOnly?: boolean; required?: boolean; error?: string; min?: number | string; max?: number | string; inputMode?: "numeric" | "decimal";
 }) {
-  return <div className="min-w-0"><Label htmlFor={id} className={labelClass}>{label}{required && <span aria-label="obrigatório" className="text-red-700"> *</span>}</Label><Input id={id} type={type} value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} readOnly={readOnly} required={required} aria-invalid={Boolean(error)} aria-describedby={error ? `${id}-erro` : undefined} className={`${inputClass} ${readOnly ? "bg-[#edf1f5] text-[#606b79]" : ""} ${error ? "border-red-500" : ""}`} />{error && <p id={`${id}-erro`} className="mt-2 text-sm text-red-700">{error}</p>}</div>;
+  return <div className="min-w-0"><Label htmlFor={id} className={labelClass}>{label}{required && <span aria-label="obrigatório" className="text-red-700"> *</span>}</Label><Input id={id} type={type} value={value} onChange={(event) => onChange(event.target.value)} onBlur={onBlur} placeholder={placeholder} readOnly={readOnly} required={required} min={min} max={max} inputMode={inputMode} aria-invalid={Boolean(error)} aria-describedby={error ? `${id}-erro` : undefined} className={`${inputClass} ${readOnly ? "bg-[#edf1f5] text-[#606b79]" : ""} ${error ? "border-red-500" : ""}`} />{error && <p id={`${id}-erro`} className="mt-2 text-sm text-red-700">{error}</p>}</div>;
 }
 
-export default function DadosAssistenciais({ contexto, dados, dataNascimento, onChange, errors = {}, pessoasDisponiveis }: Props) {
+type CamposIdentificacaoProps = Pick<Props, "dados" | "onChange" | "errors">;
+
+export function CamposIdentificacaoComplementar({ dados, onChange, errors = {} }: CamposIdentificacaoProps) {
+  const atualizar = <K extends keyof DadosContextuais>(campo: K, valor: DadosContextuais[K]) => onChange({ ...dados, [campo]: valor });
+
+  return <>
+    <div className="sm:col-span-2"><Campo id="nomeMae" label="Nome da mãe" value={dados.nomeMae} onChange={(valor) => atualizar("nomeMae", valor)} placeholder="Digite o nome completo" required error={errors.nomeMae} /></div>
+    <div><Label htmlFor="sexo" className={labelClass}>Sexo</Label><select id="sexo" value={dados.sexo} onChange={(event) => atualizar("sexo", event.target.value)} className={selectClass}><option value="">Selecione</option><option>Feminino</option><option>Masculino</option><option>Outro</option><option>Prefere não informar</option></select></div>
+    <div><Label htmlFor="estadoCivil" className={labelClass}>Estado civil</Label><select id="estadoCivil" value={dados.estadoCivil} onChange={(event) => atualizar("estadoCivil", event.target.value)} className={selectClass}><option value="">Selecione</option><option>Solteiro(a)</option><option>Casado(a)</option><option>Divorciado(a)</option><option>Viúvo(a)</option><option>União estável</option></select></div>
+    <Campo id="rg" label="RG" value={dados.rg} onChange={(valor) => atualizar("rg", valor)} placeholder="00.000.000-0" required error={errors.rg} />
+    <Campo id="nis" label="Número do NIS" value={dados.nis} onChange={(valor) => atualizar("nis", valor.replace(/\D/g, "").slice(0, 11))} placeholder="00000000000" />
+  </>;
+}
+
+export default function DadosAssistenciais({ contexto, dados, onChange, errors = {}, pessoasDisponiveis }: Props) {
   const atualizar = <K extends keyof DadosContextuais>(campo: K, valor: DadosContextuais[K]) => onChange({ ...dados, [campo]: valor });
 
   function atualizarMembro(id: string, campo: keyof Omit<MembroFamilia, "id">, valor: string) {
@@ -65,27 +79,16 @@ export default function DadosAssistenciais({ contexto, dados, dataNascimento, on
       ...membro, pessoaId,
       nome: pessoa?.tipo === "FISICA" ? pessoa.nome : "",
       dataNascimento: pessoa?.tipo === "FISICA" ? pessoa.dataNascimento : "",
+      idade: pessoa?.tipo === "FISICA" && pessoa.idade != null ? String(pessoa.idade) : "",
     } : membro));
   }
 
   return <>
     <section className={sectionClass}>
-      <Cabecalho titulo="Identificação complementar" descricao={contexto === "IDOSA" ? "Dados complementares da idosa atendida." : "Dados complementares da pessoa responsável pela família."} />
-      <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="lg:col-span-2"><Campo id="nomeMae" label="Nome da mãe" value={dados.nomeMae} onChange={(valor) => atualizar("nomeMae", valor)} placeholder="Digite o nome completo" required error={errors.nomeMae} /></div>
-        <Campo id="idade" label="Idade" value={idade(dataNascimento)} onChange={() => undefined} readOnly />
-        <div><Label htmlFor="sexo" className={labelClass}>Sexo</Label><select id="sexo" value={dados.sexo} onChange={(event) => atualizar("sexo", event.target.value)} className={selectClass}><option value="">Selecione</option><option>Feminino</option><option>Masculino</option><option>Outro</option><option>Prefere não informar</option></select></div>
-        <div><Label htmlFor="estadoCivil" className={labelClass}>Estado civil</Label><select id="estadoCivil" value={dados.estadoCivil} onChange={(event) => atualizar("estadoCivil", event.target.value)} className={selectClass}><option value="">Selecione</option><option>Solteiro(a)</option><option>Casado(a)</option><option>Divorciado(a)</option><option>Viúvo(a)</option><option>União estável</option></select></div>
-        <Campo id="rg" label="RG" value={dados.rg} onChange={(valor) => atualizar("rg", valor)} placeholder="00.000.000-0" required error={errors.rg} />
-        <Campo id="nis" label="Número do NIS" value={dados.nis} onChange={(valor) => atualizar("nis", valor.replace(/\D/g, "").slice(0, 11))} placeholder="00000000000" />
-      </div>
-    </section>
-
-    <section className={sectionClass}>
       <Cabecalho titulo="Residência" descricao="Informe a situação da moradia." />
       <div className="grid gap-5 sm:grid-cols-2">
         <div><Label htmlFor="residencia" className={labelClass}>Tipo de residência <span aria-label="obrigatório" className="text-red-700">*</span></Label><select id="residencia" value={dados.residencia} onChange={(event) => atualizar("residencia", event.target.value)} required aria-invalid={Boolean(errors.residencia)} aria-describedby={errors.residencia ? "residencia-erro" : undefined} className={`${selectClass} ${errors.residencia ? "border-red-500" : ""}`}><option value="">Selecione</option><option>Própria</option><option>Cedida</option><option>Alugada</option></select>{errors.residencia && <p id="residencia-erro" className="mt-2 text-sm text-red-700">{errors.residencia}</p>}</div>
-        {dados.residencia === "Alugada" && <Campo id="valorAluguel" label="Valor do aluguel" value={dados.valorAluguel} onChange={(valor) => atualizar("valorAluguel", valor)} placeholder="R$ 0,00" required error={errors.valorAluguel} />}
+        {dados.residencia === "Alugada" && <Campo id="valorAluguel" label="Valor do aluguel" value={dados.valorAluguel} onChange={(valor) => atualizar("valorAluguel", valor)} onBlur={() => atualizar("valorAluguel", formatarMoeda(dados.valorAluguel))} inputMode="decimal" placeholder="R$ 0,00" required error={errors.valorAluguel} />}
       </div>
     </section>
 
@@ -94,8 +97,13 @@ export default function DadosAssistenciais({ contexto, dados, dataNascimento, on
       <div className="grid gap-5 sm:grid-cols-3">
         <div><Label htmlFor="escolaridade" className={labelClass}>Escolaridade</Label><select id="escolaridade" value={dados.escolaridade} onChange={(event) => atualizar("escolaridade", event.target.value)} className={selectClass}><option value="">Selecione</option><option>Não alfabetizado(a)</option><option>Ensino fundamental</option><option>Ensino médio</option><option>Ensino superior</option><option>Pós-graduação</option></select></div>
         <Campo id="ocupacao" label="Ocupação" value={dados.ocupacao} onChange={(valor) => atualizar("ocupacao", valor)} placeholder="Ocupação atual" />
-        <Campo id="contato2" label="Número para contato 2" value={dados.contato2} onChange={(valor) => atualizar("contato2", valor)} placeholder="(00) 00000-0000" />
+        <Campo id="contato2" label="2º telefone" value={dados.contato2} onChange={(valor) => atualizar("contato2", valor)} placeholder="(00) 00000-0000" />
       </div>
+    </section>
+
+    <section className={sectionClass}>
+      <Cabecalho titulo="Avaliação" descricao="Informe o resultado da avaliação familiar, quando disponível." />
+      <div className="max-w-sm"><Label htmlFor="avaliacao" className={labelClass}>Resultado</Label><select id="avaliacao" value={dados.avaliacao} onChange={(event) => atualizar("avaliacao", event.target.value as DadosContextuais["avaliacao"])} className={selectClass}><option value="">Não avaliada</option><option>Aprovada</option><option>Reprovada</option></select></div>
     </section>
 
     <section id="rendas" tabIndex={-1} className={sectionClass}>
@@ -103,13 +111,13 @@ export default function DadosAssistenciais({ contexto, dados, dataNascimento, on
       <div className="overflow-hidden rounded-xl border border-[#d9e1ea]">
         {dados.rendas.map((renda, indice) => <div key={renda.id} className={`grid items-center gap-3 p-4 sm:grid-cols-[1fr_180px] ${indice ? "border-t border-[#d9e1ea]" : ""}`}>
           <label className="flex cursor-pointer items-center gap-3 text-base"><input type="checkbox" checked={renda.ativa} onChange={(event) => atualizar("rendas", dados.rendas.map((item) => item.id === renda.id ? { ...item, ativa: event.target.checked, valor: event.target.checked ? item.valor : "" } : item))} className="size-4 accent-[#4697c5]" />{renda.nome}</label>
-          <Input aria-label={`Valor de ${renda.nome}`} disabled={!renda.ativa} value={renda.valor} onChange={(event) => atualizar("rendas", dados.rendas.map((item) => item.id === renda.id ? { ...item, valor: event.target.value } : item))} placeholder="R$ 0,00" className={inputClass} />
+          <Input aria-label={`Valor de ${renda.nome}`} disabled={!renda.ativa} value={renda.valor} inputMode="decimal" onChange={(event) => atualizar("rendas", dados.rendas.map((item) => item.id === renda.id ? { ...item, valor: event.target.value } : item))} onBlur={() => atualizar("rendas", dados.rendas.map((item) => item.id === renda.id ? { ...item, valor: formatarMoeda(item.valor) } : item))} placeholder="R$ 0,00" className={inputClass} />
         </div>)}
       </div>
     </section>
 
     <section id="membros" tabIndex={-1} className={sectionClass}>
-      <Cabecalho titulo="Composição familiar" descricao="Adicione os membros que compõem esta família." />
+      <Cabecalho titulo="Composição familiar" descricao="Adicione pessoas cadastradas; a data de nascimento ou a idade informada no cadastro será exibida abaixo." />
       {errors.membros && <p className="mb-4 text-sm text-red-700">{errors.membros}</p>}
       <div className="space-y-4">
         {dados.membros.map((membro, indice) => <div key={membro.id} className="rounded-xl border border-[#d9e1ea] bg-white p-4 sm:p-5">
@@ -117,11 +125,11 @@ export default function DadosAssistenciais({ contexto, dados, dataNascimento, on
           <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
             <div><Label htmlFor={`membro-${membro.id}-pessoa`} className={labelClass}>Nome <span className="text-red-700">*</span></Label><select id={`membro-${membro.id}-pessoa`} value={membro.pessoaId} onChange={(event) => selecionarPessoa(membro.id, event.target.value)} className={selectClass}><option value="">Selecione uma pessoa cadastrada</option>{pessoasDisponiveis.filter((pessoa) => pessoa.tipo === "FISICA" && !dados.membros.some((item) => item.id !== membro.id && item.pessoaId === pessoa.id)).map((pessoa) => <option key={pessoa.id} value={pessoa.id}>{pessoa.tipo === "FISICA" ? pessoa.nome : ""}</option>)}</select></div>
             <Campo id={`membro-${membro.id}-nascimento`} label="Data de nascimento" value={dataParaTela(membro.dataNascimento)} onChange={() => undefined} readOnly />
-            <Campo id={`membro-${membro.id}-idade`} label="Idade" value={idade(membro.dataNascimento)} onChange={() => undefined} readOnly />
+            <Campo id={`membro-${membro.id}-idade`} label="Idade" value={membro.idade || idade(membro.dataNascimento)} onChange={() => undefined} readOnly />
             <div><Label htmlFor={`membro-${membro.id}-vinculo`} className={labelClass}>Vínculo familiar <span className="text-red-700">*</span></Label><select id={`membro-${membro.id}-vinculo`} value={membro.vinculo} onChange={(event) => atualizarMembro(membro.id, "vinculo", event.target.value)} className={selectClass}><option value="">Selecione</option>{["Filho(a)", "Esposo(a)", "Mãe", "Pai", "Irmão(ã)", "Neto(a)", "Outro"].map((vinculo) => <option key={vinculo}>{vinculo}</option>)}</select></div>
           </div>
         </div>)}
-        <Button type="button" variant="outline" onClick={() => atualizar("membros", [...dados.membros, { id: crypto.randomUUID(), pessoaId: "", nome: "", dataNascimento: "", vinculo: "" }])} className="h-10"><Plus className="size-4" /> Adicionar integrante</Button>
+        <Button type="button" variant="outline" onClick={() => atualizar("membros", [...dados.membros, { id: crypto.randomUUID(), pessoaId: "", nome: "", cpf: "", rg: "", nis: "", dataNascimento: "", idade: "", vinculo: "" }])} className="h-10"><Plus className="size-4" /> Adicionar integrante</Button>
       </div>
     </section>
 

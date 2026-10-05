@@ -4,9 +4,15 @@ import { afterEach, test } from "node:test";
 import ts from "typescript";
 
 const source = await readFile(new URL("../src/services/pessoaService.ts", import.meta.url), "utf8");
-const { outputText } = ts.transpileModule(source, {
+const apiSource = await readFile(new URL("../src/services/apiService.ts", import.meta.url), "utf8");
+const apiOutput = ts.transpileModule(apiSource, {
   compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
-});
+}).outputText;
+const apiUrl = `data:text/javascript;base64,${Buffer.from(apiOutput).toString("base64")}`;
+const transpiled = ts.transpileModule(source, {
+  compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
+}).outputText;
+const outputText = transpiled.replace("@/services/apiService", apiUrl);
 const service = await import(`data:text/javascript;base64,${Buffer.from(outputText).toString("base64")}`);
 const originalFetch = globalThis.fetch;
 const originalStorage = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
@@ -20,7 +26,7 @@ afterEach(() => {
 function storage(token = "test-token") {
   Object.defineProperty(globalThis, "localStorage", {
     configurable: true,
-    value: { getItem(key) { assert.equal(key, "token"); return token; } },
+    value: { getItem(key) { assert.equal(key, "token"); return token; }, removeItem(key) { assert.ok(["token", "usuarioAtual"].includes(key)); } },
   });
 }
 
@@ -36,16 +42,41 @@ test("listing authenticates and converts numeric IDs and backend roles", async (
   assert.equal(pessoa.perfil, "Atendimento/Gestão");
 });
 
+test("listing sends backend search and status filters", async () => {
+  storage();
+  globalThis.fetch = async (url) => {
+    assert.equal(url, "http://localhost:8080/api/pessoas?busca=Ana+Silva&status=false");
+    return Response.json([]);
+  };
+  assert.deepEqual(await service.listarPessoas(undefined, { busca: "Ana Silva", status: false }), []);
+});
+
+test("detail and reactivation use the person endpoints", async () => {
+  storage();
+  const requests = [];
+  globalThis.fetch = async (url, options) => {
+    requests.push([url, options.method ?? "GET"]);
+    if ((options.method ?? "GET") === "GET") return Response.json({ id: 12, tipo: "FISICA", nome: "Ana", idade: 30 });
+    return new Response(null, { status: 204 });
+  };
+  assert.equal((await service.buscarPessoa("12")).id, "12");
+  await service.reativarPessoa("12");
+  assert.deepEqual(requests, [
+    ["http://localhost:8080/api/pessoas/12", "GET"],
+    ["http://localhost:8080/api/pessoas/12/reativar", "PATCH"],
+  ]);
+});
+
 test("creation sends password and API role to the physical person route", async () => {
   storage();
   globalThis.fetch = async (url, options) => {
     assert.equal(url, "http://localhost:8080/api/pessoas/fisicas");
     assert.equal(options.method, "POST");
     assert.equal(options.headers["Content-Type"], "application/json");
-    assert.deepEqual(JSON.parse(options.body), { nome: "Ana", perfil: "ADMINISTRADOR", senha: "password123" });
+    assert.deepEqual(JSON.parse(options.body), { nome: "Ana", dataNascimento: null, idadeInformada: 30, perfil: "ADMINISTRADOR", senha: "password123" });
     return Response.json({ id: 12, tipo: "FISICA", perfil: "ADMINISTRADOR", usuario: "ana" });
   };
-  const result = await service.salvarPessoa({ tipo: "FISICA", nome: "Ana", perfil: "Administrador", senha: "password123" });
+  const result = await service.salvarPessoa({ tipo: "FISICA", nome: "Ana", idadeInformada: 30, perfil: "Administrador", senha: "password123" });
   assert.equal(result.id, "12");
 });
 

@@ -51,7 +51,7 @@ function Login({ onSuccess }: { onSuccess: (usuario: string) => void }) {
 
   return (
     <main className="flex min-h-dvh w-full">
-      <section className="relative hidden min-h-dvh w-1/2 grid-rows-[minmax(0,1fr)_auto_minmax(0,1fr)] bg-[#1495D6] px-16 py-12 text-white lg:grid">
+      <section className="relative hidden min-h-dvh w-1/2 grid-rows-[minmax(0,1fr)_auto_minmax(0,1fr)] bg-[#4697c5] px-16 py-12 text-white lg:grid">
         <div className="self-start">
           <InstitutionBrand />
         </div>
@@ -158,7 +158,7 @@ function Login({ onSuccess }: { onSuccess: (usuario: string) => void }) {
                   Lembrar acesso
                 </Label>
               </div>
-              <button type="button" className="text-[15px] text-[#1495D6] hover:underline">
+              <button type="button" className="text-[15px] text-[#4697c5] hover:underline">
                 Esqueci minha senha
               </button>
             </div>
@@ -166,7 +166,7 @@ function Login({ onSuccess }: { onSuccess: (usuario: string) => void }) {
             <Button
               type="submit"
               disabled={carregando}
-              className="h-10 w-full rounded-lg bg-[#1495D6] text-[15px] font-medium text-white hover:bg-[#117eb5]"
+              className="h-10 w-full rounded-lg bg-[#4697c5] text-[15px] font-medium text-white hover:bg-[#67a0c0]"
             >
               <LogIn size={16} aria-hidden="true" />
               {carregando ? "Entrando..." : "Entrar"}
