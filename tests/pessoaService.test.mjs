@@ -124,7 +124,14 @@ test("authentication, permission and network failures are reported", async () =>
   globalThis.fetch = () => assert.fail("Must not request without a token");
   await assert.rejects(service.listarPessoas(), /sessão expirou/);
   storage();
-  for (const [status, message] of [[401, /sessão expirou/], [403, /permissão/], [500, /concluir a operação/]]) {
+  for (const [status, message] of [
+    [400, /dados enviados são inválidos/],
+    [401, /sessão expirou/],
+    [403, /permissão/],
+    [404, /não foi encontrado/],
+    [409, /conflita com os dados/],
+    [500, /erro interno/],
+  ]) {
     globalThis.fetch = async () => new Response("", { status });
     await assert.rejects(service.listarPessoas(), message);
   }
