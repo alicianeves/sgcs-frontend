@@ -133,8 +133,37 @@ test("authentication, permission and network failures are reported", async () =>
     [500, /erro interno/],
   ]) {
     globalThis.fetch = async () => new Response("", { status });
-    await assert.rejects(service.listarPessoas(), message);
+    await assert.rejects(service.listarPessoas(), (erro) => {
+      assert.equal(erro.name, "ErroApi");
+      assert.equal(erro.status, status);
+      assert.match(erro.message, message);
+      assert.doesNotMatch(erro.message, /conectar ao servidor/);
+      return true;
+    });
   }
   globalThis.fetch = async () => { throw new TypeError("Failed to fetch"); };
-  await assert.rejects(service.listarPessoas(), /conectar ao servidor/);
+  await assert.rejects(service.listarPessoas(), (erro) => {
+    assert.equal(erro.name, "ErroConexaoApi");
+    assert.match(erro.message, /conectar ao servidor/);
+    return true;
+  });
+});
+
+test("an intentional request cancellation is not classified as a connection failure", async () => {
+  storage();
+  const controller = new AbortController();
+  globalThis.fetch = async (_url, options) => new Promise((_resolve, reject) => {
+    options.signal.addEventListener("abort", () => reject(new DOMException("The operation was aborted.", "AbortError")));
+  });
+
+  const primeiraRequisicao = service.listarPessoas(controller.signal, { status: true });
+  controller.abort();
+  await assert.rejects(primeiraRequisicao, (erro) => {
+    assert.equal(erro.name, "AbortError");
+    assert.doesNotMatch(erro.message, /conectar ao servidor/);
+    return true;
+  });
+
+  globalThis.fetch = async () => Response.json([]);
+  assert.deepEqual(await service.listarPessoas(undefined, { status: true }), []);
 });

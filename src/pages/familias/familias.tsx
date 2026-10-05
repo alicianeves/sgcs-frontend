@@ -118,7 +118,22 @@ function FormularioFamilia({ familia, onCancelar, onSalvo }: { familia: Familia 
   const [salvando, setSalvando] = useState(false);
   const salvamento = useRef(false);
 
-  useEffect(() => { const controller = new AbortController(); listarPessoas(controller.signal, { status: true }).then((lista) => setPessoas(lista.filter((pessoa) => pessoa.tipo === "FISICA" && (!pessoa.familiaId || pessoa.familiaId === familia?.id)))).catch((falha: unknown) => setErro(falha instanceof Error ? falha.message : "Não foi possível carregar as pessoas.")); return () => controller.abort(); }, [familia?.id]);
+  useEffect(() => {
+    const controller = new AbortController();
+    listarPessoas(controller.signal, { status: true })
+      .then((lista) => {
+        if (!controller.signal.aborted) {
+          setPessoas(lista.filter((pessoa) => pessoa.tipo === "FISICA" && (!pessoa.familiaId || pessoa.familiaId === familia?.id)));
+          setErro("");
+        }
+      })
+      .catch((falha: unknown) => {
+        if (!controller.signal.aborted) {
+          setErro(falha instanceof Error ? falha.message : "Não foi possível carregar as pessoas.");
+        }
+      });
+    return () => controller.abort();
+  }, [familia?.id]);
   const pessoasFiltradas = useMemo(() => { const termo = buscaPessoa.trim().toLocaleLowerCase("pt-BR"); return pessoas.filter((pessoa) => pessoa.tipo === "FISICA" && (!termo || pessoa.nome.toLocaleLowerCase("pt-BR").includes(termo) || pessoa.cpf.includes(termo.replace(/\D/g, "")))); }, [pessoas, buscaPessoa]);
 
   function validar() {

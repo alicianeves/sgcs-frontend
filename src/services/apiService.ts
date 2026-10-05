@@ -42,7 +42,10 @@ export async function requisitarApi(caminho: string, opcoes: RequestInit = {}) {
         ...opcoes.headers,
       },
     });
-  } catch {
+  } catch (erro) {
+    if (erro && typeof erro === "object" && "name" in erro && erro.name === "AbortError") {
+      throw erro;
+    }
     throw new ErroConexaoApi();
   }
 
