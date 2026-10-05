@@ -34,7 +34,7 @@ function familiaApi(id = 7) {
     id, nome: "Família Oliveira", quantidadeIntegrantes: 1, avaliacao: "APROVADA", status: true,
     rendas: [{ tipo: "TRABALHO", ativa: true, valor: 1500.5 }],
     integrantes: [{ pessoaId: 9, nome: "Bia", cpf: "52998224725", rg: null, nis: null, dataNascimento: "2000-01-01", idade: 26, vinculo: "FILHO_A" }],
-    relatos: "Acompanhamento mensal", dataInativacao: null,
+    relatos: "Acompanhamento mensal", residencia: "PROPRIA", valorAluguel: null, dataInativacao: null,
   };
 }
 
@@ -51,6 +51,8 @@ test("family creation sends exactly the current backend contract", async () => {
       integrantes: [{ pessoaId: 9, vinculo: "FILHO_A" }],
       relatos: "Acompanhamento mensal",
       avaliacao: "APROVADA",
+      residencia: "PROPRIA",
+      valorAluguel: null,
     });
     return Response.json(familiaApi());
   };
@@ -60,6 +62,7 @@ test("family creation sends exactly the current backend contract", async () => {
   dados.integrantes = [{ pessoaId: "9", vinculo: "FILHO_A" }];
   dados.relatos = "Acompanhamento mensal";
   dados.avaliacao = "APROVADA";
+  dados.residencia = "PROPRIA";
   const criada = await service.salvarFamilia(dados);
   assert.equal(criada.id, "7");
   assert.equal(criada.membros[0].pessoaId, "9");
@@ -115,22 +118,25 @@ test("family status uses the inactivation and reactivation endpoints", async () 
   assert.deepEqual(urls, ["http://localhost:8080/api/familias/7/inativar", "http://localhost:8080/api/familias/7/reativar"]);
 });
 
-test("contextual elderly creation also follows the new family DTO", async () => {
+test("contextual elderly creation sends only person and attendance DTOs", async () => {
   storage();
   const dados = service.dadosContextuaisVazios();
   dados.questionario = dados.questionario.map(() => ({ resposta: "SIM", observacao: "" }));
   globalThis.fetch = async (url, options) => {
     assert.equal(url, "http://localhost:8080/api/cadastros/contextuais");
     const body = JSON.parse(options.body);
-    assert.equal(body.familia.nome, "Família de Ana");
-    assert.ok(!("situacaoMoradia" in body.familia));
+    assert.equal(body.contexto, "IDOSO");
+    assert.equal(body.pessoa.tipoCadastro, "IDOSO");
+    assert.equal(body.pessoa.familiaId, null);
+    assert.ok(!("familia" in body));
     assert.equal(body.atendimento.questionario.length, 12);
     assert.match(body.atendimento.dataAtendimento, /^\d{4}-\d{2}-\d{2}$/);
     return Response.json({ pessoaId: 4, familiaId: 7, atendimentoId: 18 });
   };
-  const resposta = await service.salvarCadastroContextual("IDOSA", {
+  const resposta = await service.salvarCadastroContextual("IDOSO", {
     tipo: "FISICA", nome: "Ana", cpf: "52998224725", dataNascimento: "1950-01-01", telefone: "11999999999",
     cep: "01001000", logradouro: "Rua A", numero: "1", bairro: "Centro", cidade: "São Paulo", estado: "SP", email: "",
+    tipoCadastro: "IDOSO", contatosFamiliares: [{ nome: "Bia", dataNascimento: "1980-01-01", idade: 46, vinculoFamiliar: "FILHO_A", telefone: "11999999999" }],
   }, dados);
   assert.deepEqual(resposta, { pessoaId: 4, familiaId: 7, atendimentoId: 18 });
 });

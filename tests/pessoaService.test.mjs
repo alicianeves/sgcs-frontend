@@ -73,7 +73,11 @@ test("creation sends password and API role to the physical person route", async 
     assert.equal(url, "http://localhost:8080/api/pessoas/fisicas");
     assert.equal(options.method, "POST");
     assert.equal(options.headers["Content-Type"], "application/json");
-    assert.deepEqual(JSON.parse(options.body), { nome: "Ana", dataNascimento: null, idadeInformada: 30, perfil: "ADMINISTRADOR", senha: "password123" });
+    assert.deepEqual(JSON.parse(options.body), {
+      nome: "Ana", dataNascimento: null, idadeInformada: 30, tipoCadastro: "PESSOA",
+      familiaId: null, vinculoFamiliar: null, contatosFamiliares: [],
+      perfil: "ADMINISTRADOR", senha: "password123",
+    });
     return Response.json({ id: 12, tipo: "FISICA", perfil: "ADMINISTRADOR", usuario: "ana" });
   };
   const result = await service.salvarPessoa({ tipo: "FISICA", nome: "Ana", idadeInformada: 30, perfil: "Administrador", senha: "password123" });
@@ -95,7 +99,7 @@ test("legal persons use their own endpoint without access fields", async () => {
   storage();
   globalThis.fetch = async (url, options) => {
     assert.equal(url, "http://localhost:8080/api/pessoas/juridicas");
-    assert.deepEqual(JSON.parse(options.body), { razaoSocial: "Empresa", cnpj: "12345678000199" });
+    assert.deepEqual(JSON.parse(options.body), { razaoSocial: "Empresa", cnpj: "12345678000199", tipoCadastro: "PESSOA" });
     return Response.json({ id: 13, tipo: "JURIDICA", razaoSocial: "Empresa" });
   };
   assert.equal((await service.salvarPessoa({ tipo: "JURIDICA", razaoSocial: "Empresa", cnpj: "12345678000199" })).tipo, "JURIDICA");
@@ -109,6 +113,29 @@ test("inactivation accepts an empty 204 response", async () => {
     return new Response(null, { status: 204 });
   };
   await service.inativarPessoa("12");
+});
+
+test("elderly registration sends family contacts and never sends access fields", async () => {
+  storage();
+  globalThis.fetch = async (_url, options) => {
+    const body = JSON.parse(options.body);
+    assert.equal(body.tipoCadastro, "IDOSO");
+    assert.equal(body.familiaId, 7);
+    assert.equal(body.vinculoFamiliar, "FILHO_A");
+    assert.deepEqual(body.contatosFamiliares, [{
+      nome: "Maria", dataNascimento: "1980-01-01", idade: 46,
+      vinculoFamiliar: "FILHO_A", telefone: "11999999999",
+    }]);
+    assert.equal(Object.hasOwn(body, "usuario"), false);
+    assert.equal(Object.hasOwn(body, "senha"), false);
+    assert.equal(Object.hasOwn(body, "perfil"), false);
+    return Response.json({ id: 14, tipo: "FISICA", tipoCadastro: "IDOSO", contatosFamiliares: [] });
+  };
+  await service.salvarPessoa({
+    tipo: "FISICA", tipoCadastro: "IDOSO", familiaId: "7", vinculoFamiliar: "FILHO_A",
+    usuario: "ignorado", senha: "ignorada", perfil: "Administrador",
+    contatosFamiliares: [{ nome: " Maria ", dataNascimento: "1980-01-01", idade: 46, vinculoFamiliar: "FILHO_A", telefone: "(11) 99999-9999" }],
+  });
 });
 
 test("backend validation and conflict messages are preserved", async () => {
